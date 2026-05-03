@@ -9,6 +9,8 @@ venv/
 env/
 ENV/
 *.log
+.env
+.env.*
 
 # Frontend
 front/node_modules/
