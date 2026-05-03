@@ -139,6 +139,10 @@ async def run() -> None:
         tasks.append(asyncio.create_task(state_sink.run(stop_event), name="state-writer"))
 
     await backfill.run(stop_event)
+    if isinstance(state_sink, AccountStateWriter):
+        LOGGER.info("waiting for initial database snapshot persistence pending=%s", state_sink.pending)
+        await state_sink.flush()
+        LOGGER.info("initial database snapshot persistence flushed dropped=%s", state_sink.dropped)
 
     tasks.extend(
         [

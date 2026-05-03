@@ -684,19 +684,15 @@ class AccountStateWriter:
     def dropped(self) -> int:
         return self._dropped
 
+    @property
+    def pending(self) -> int:
+        return self._queue.qsize()
+
     async def publish(self, state: MarginfiAccountState) -> None:
-        try:
-            self._queue.put_nowait(state)
-            return
-        except asyncio.QueueFull:
-            try:
-                dropped = self._queue.get_nowait()
-                self._queue.task_done()
-                self._dropped += 1
-                LOGGER.warning("state write queue full, dropping oldest account=%s", dropped.pubkey)
-            except asyncio.QueueEmpty:
-                pass
-        self._queue.put_nowait(state)
+        await self._queue.put(state)
+
+    async def flush(self) -> None:
+        await self._queue.join()
 
     async def run(self, stop_event: asyncio.Event) -> None:
         while not stop_event.is_set() or not self._queue.empty():

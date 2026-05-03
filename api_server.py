@@ -249,6 +249,10 @@ async def run() -> None:
         else None
     )
     await backfill.run(stop_event)
+    if isinstance(state_sink, AccountStateWriter):
+        LOGGER.info("waiting for initial database snapshot persistence pending=%s", state_sink.pending)
+        await state_sink.flush()
+        LOGGER.info("initial database snapshot persistence flushed dropped=%s", state_sink.dropped)
 
     host = _get_host()
     port = _get_int("LIQUIDATION_RADAR_API_PORT", 8765)
