@@ -35,6 +35,14 @@ def _split_csv(raw: str | None) -> tuple[str, ...]:
     return tuple(part.strip() for part in raw.split(",") if part.strip())
 
 
+def _normalize_http_endpoint(endpoint: str) -> str:
+    if endpoint.startswith("wss://"):
+        return "https://" + endpoint.removeprefix("wss://")
+    if endpoint.startswith("ws://"):
+        return "http://" + endpoint.removeprefix("ws://")
+    return endpoint
+
+
 def _get_decimal(name: str, default: str) -> Decimal:
     return Decimal(os.getenv(name, default))
 
@@ -59,6 +67,7 @@ class RadarConfig:
     protocol: str
     program_id: str
     ws_endpoints: tuple[str, ...]
+    http_endpoints: tuple[str, ...]
     commitment: str
     top_n: int
     refresh_interval_ms: int
@@ -82,6 +91,10 @@ class RadarConfig:
     reconnect_initial_delay_s: float
     reconnect_max_delay_s: float
     parse_active_balances: bool
+    backfill_enabled: bool
+    backfill_required: bool
+    backfill_retry_count: int
+    backfill_request_timeout_s: float
     collateral_offset: int
     debt_offset: int
     log_level: str
@@ -93,11 +106,17 @@ class RadarConfig:
             or _split_csv(os.getenv("LIQUIDATION_RADAR_WS_ENDPOINTS"))
             or DEFAULT_WS_ENDPOINTS
         )
+        http_endpoints = (
+            _split_csv(os.getenv("SOLANA_HTTP_ENDPOINTS"))
+            or _split_csv(os.getenv("LIQUIDATION_RADAR_HTTP_ENDPOINTS"))
+            or tuple(_normalize_http_endpoint(endpoint) for endpoint in ws_endpoints)
+        )
 
         return cls(
             protocol=os.getenv("LIQUIDATION_RADAR_PROTOCOL", "marginfi").lower(),
             program_id=os.getenv("MARGINFI_PROGRAM_ID", DEFAULT_MARGINFI_PROGRAM_ID),
             ws_endpoints=ws_endpoints,
+            http_endpoints=http_endpoints,
             commitment=os.getenv("SOLANA_COMMITMENT", "processed"),
             top_n=_get_int("LIQUIDATION_RADAR_TOP_N", 20),
             refresh_interval_ms=_get_int("LIQUIDATION_RADAR_REFRESH_MS", 500),
@@ -121,6 +140,10 @@ class RadarConfig:
             reconnect_initial_delay_s=_get_float("LIQUIDATION_RADAR_RECONNECT_INITIAL_DELAY", 0.25),
             reconnect_max_delay_s=_get_float("LIQUIDATION_RADAR_RECONNECT_MAX_DELAY", 8.0),
             parse_active_balances=_get_bool("LIQUIDATION_RADAR_PARSE_BALANCES", True),
+            backfill_enabled=_get_bool("LIQUIDATION_RADAR_BACKFILL_ENABLED", True),
+            backfill_required=_get_bool("LIQUIDATION_RADAR_BACKFILL_REQUIRED", False),
+            backfill_retry_count=_get_int("LIQUIDATION_RADAR_BACKFILL_RETRY_COUNT", 3),
+            backfill_request_timeout_s=_get_float("LIQUIDATION_RADAR_BACKFILL_TIMEOUT", 30.0),
             collateral_offset=_get_int("MARGINFI_COLLATERAL_OFFSET", ASSET_VALUE_MAINT_OFFSET),
             debt_offset=_get_int("MARGINFI_DEBT_OFFSET", LIABILITY_VALUE_MAINT_OFFSET),
             log_level=os.getenv("LIQUIDATION_RADAR_LOG_LEVEL", "INFO").upper(),

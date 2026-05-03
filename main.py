@@ -3,11 +3,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
-from typing import Protocol
 
+from backfill import InitialBackfillRunner
 from config import RadarConfig
-from errors import AccountDecodeError, InvalidAccountDataError
-from models import AccountUpdate, MarginfiAccountState, RiskLevel
+from models import AccountUpdate
+from pipeline import NoopNotifier, process_updates
 from protocols import ProtocolAdapter, build_protocol_adapter
 from ranking_engine import RankingEngine
 from risk_engine import RiskEngine
@@ -15,53 +15,6 @@ from utils import clear_screen, format_decimal, format_usd, monotonic_ms, short_
 from websocket_client import MarginfiWebSocketClient
 
 LOGGER = logging.getLogger(__name__)
-
-
-class RiskNotifier(Protocol):
-    async def publish(self, state: MarginfiAccountState) -> None:
-        ...
-
-
-class NoopNotifier:
-    async def publish(self, state: MarginfiAccountState) -> None:
-        return None
-
-
-async def process_updates(
-    updates: asyncio.Queue[AccountUpdate],
-    protocol: ProtocolAdapter,
-    risk_engine: RiskEngine,
-    ranking_engine: RankingEngine,
-    notifier: RiskNotifier,
-    stop_event: asyncio.Event,
-) -> None:
-    while not stop_event.is_set():
-        try:
-            update = await asyncio.wait_for(updates.get(), timeout=0.5)
-        except TimeoutError:
-            continue
-
-        try:
-            decoded = protocol.decode(update)
-            if decoded is None:
-                ranking_engine.mark_skipped()
-                continue
-
-            previous = ranking_engine.get(decoded.pubkey)
-            evaluated = risk_engine.evaluate(decoded, previous)
-            ranking_engine.upsert(evaluated)
-            if evaluated.risk_level in {RiskLevel.LIQUIDATABLE, RiskLevel.HIGH}:
-                await notifier.publish(evaluated)
-        except InvalidAccountDataError as exc:
-            ranking_engine.mark_skipped()
-            LOGGER.debug("invalid account data: %s", exc)
-        except AccountDecodeError as exc:
-            ranking_engine.mark_skipped()
-            LOGGER.error("decode error: %s", exc)
-        except Exception:
-            LOGGER.exception("failed to process account update")
-        finally:
-            updates.task_done()
 
 
 async def render_cli(
@@ -138,26 +91,36 @@ async def run() -> None:
     ranking_engine = RankingEngine(config)
     notifier = NoopNotifier()
     ws_client = MarginfiWebSocketClient(config, protocol, updates)
+    backfill = InitialBackfillRunner(config, protocol, risk_engine, ranking_engine)
 
     LOGGER.info(
-        "radar starting protocol=%s endpoints=%s workers=%s cache=%s",
+        "radar starting protocol=%s ws_endpoints=%s http_endpoints=%s workers=%s cache=%s backfill=%s",
         protocol.protocol_name,
         ",".join(config.ws_endpoints),
+        ",".join(config.http_endpoints),
         config.risk_worker_count,
         config.account_cache_size,
+        config.backfill_enabled,
     )
 
     tasks = [
         asyncio.create_task(ws_client.run(stop_event), name="websocket-client"),
-        *[
-            asyncio.create_task(
-                process_updates(updates, protocol, risk_engine, ranking_engine, notifier, stop_event),
-                name=f"account-processor-{idx}",
-            )
-            for idx in range(max(1, config.risk_worker_count))
-        ],
-        asyncio.create_task(render_cli(ranking_engine, config, protocol, stop_event), name="cli-renderer"),
     ]
+
+    await backfill.run(stop_event)
+
+    tasks.extend(
+        [
+            *[
+                asyncio.create_task(
+                    process_updates(updates, protocol, risk_engine, ranking_engine, notifier, stop_event),
+                    name=f"account-processor-{idx}",
+                )
+                for idx in range(max(1, config.risk_worker_count))
+            ],
+            asyncio.create_task(render_cli(ranking_engine, config, protocol, stop_event), name="cli-renderer"),
+        ]
+    )
 
     try:
         await stop_event.wait()

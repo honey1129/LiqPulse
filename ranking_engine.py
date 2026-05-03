@@ -17,18 +17,26 @@ class RankingEngine:
         self._last_slot = 0
         self._last_rpc_endpoint = ""
 
-    def upsert(self, state: MarginfiAccountState) -> None:
+    def upsert(self, state: MarginfiAccountState) -> bool:
+        previous = self._accounts.peek(state.pubkey)
+        if previous is not None and previous.slot > 0 and state.slot > 0 and state.slot < previous.slot:
+            return False
+
         self._accounts.put(state.pubkey, state)
         self._updates_processed += 1
         self._last_slot = max(self._last_slot, state.slot)
         if state.rpc_endpoint:
             self._last_rpc_endpoint = state.rpc_endpoint
+        return True
 
     def mark_skipped(self) -> None:
         self._updates_skipped += 1
 
     def get(self, pubkey: str) -> MarginfiAccountState | None:
         return self._accounts.get(pubkey)
+
+    def peek(self, pubkey: str) -> MarginfiAccountState | None:
+        return self._accounts.peek(pubkey)
 
     def top(self, n: int | None = None) -> list[MarginfiAccountState]:
         limit = n or self._config.top_n
@@ -37,6 +45,12 @@ class RankingEngine:
             for state in self._accounts.values()
             if self._is_display_candidate(state)
         ]
+        if not candidates:
+            candidates = [
+                state
+                for state in self._accounts.values()
+                if state.health_factor is not None and state.debt_value > 0
+            ]
         candidates.sort(key=lambda item: (item.health_factor or Decimal("Infinity"), -item.exposure_usd))
         return candidates[:limit]
 

@@ -154,6 +154,9 @@ class LruCache(Generic[K, V]):
         self._items[key] = value
         return value
 
+    def peek(self, key: K) -> V | None:
+        return self._items.get(key)
+
     def put(self, key: K, value: V) -> None:
         if key in self._items:
             self._items.pop(key)

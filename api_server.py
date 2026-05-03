@@ -11,8 +11,9 @@ from typing import Any
 
 import websockets
 
+from backfill import InitialBackfillRunner
 from config import RadarConfig
-from main import NoopNotifier, process_updates
+from pipeline import NoopNotifier, process_updates
 from models import AccountUpdate, MarginfiAccountState, RadarStats, RiskLevel
 from protocols import ProtocolAdapter, build_protocol_adapter
 from ranking_engine import RankingEngine
@@ -155,7 +156,8 @@ class RadarApiServer:
         self._clients.add(websocket)
         LOGGER.info("frontend connected clients=%s", len(self._clients))
         try:
-            await websocket.send(self.snapshot_json())
+            if self._ranking_engine.stats().accounts_total > 0:
+                await websocket.send(self.snapshot_json())
             async for _ in websocket:
                 pass
         finally:
@@ -210,6 +212,10 @@ async def run() -> None:
     ranking_engine = RankingEngine(config)
     ws_client = MarginfiWebSocketClient(config, protocol, updates)
     api = RadarApiServer(config, protocol, ranking_engine, updates)
+    backfill = InitialBackfillRunner(config, protocol, risk_engine, ranking_engine)
+
+    ws_task = asyncio.create_task(ws_client.run(stop_event), name="solana-websocket")
+    await backfill.run(stop_event)
 
     host = _get_host()
     port = _get_int("LIQUIDATION_RADAR_API_PORT", 8765)
@@ -217,7 +223,7 @@ async def run() -> None:
 
     async with websockets.serve(api.handler, host, port, ping_interval=20, ping_timeout=20):
         tasks = [
-            asyncio.create_task(ws_client.run(stop_event), name="solana-websocket"),
+            ws_task,
             *[
                 asyncio.create_task(
                     process_updates(updates, protocol, risk_engine, ranking_engine, NoopNotifier(), stop_event),
@@ -245,4 +251,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
