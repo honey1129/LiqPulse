@@ -1,0 +1,202 @@
+import { useEffect, useMemo, useState } from "react";
+import { navItems, thresholds } from "./data/mockData";
+import { ControlBar } from "./components/ControlBar";
+import { RiskAccountsTable } from "./components/RiskAccountsTable";
+import { Sidebar } from "./components/Sidebar";
+import { SummaryPanels } from "./components/SummaryPanels";
+import { TopBar } from "./components/TopBar";
+import { useRadarStream } from "./hooks/useRadarStream";
+import type { RefreshInterval, RiskAccount, RiskFilter, SortOption, ThemeMode } from "./types";
+
+function App() {
+  const [activeNav, setActiveNav] = useState("Workbench");
+  const [protocol, setProtocol] = useState("marginfi v2");
+  const [riskFilter, setRiskFilter] = useState<RiskFilter>("All Risks");
+  const [sortOption, setSortOption] = useState<SortOption>("HF ASC, Size DESC");
+  const [refreshInterval, setRefreshInterval] = useState<RefreshInterval>("1s");
+  const [search, setSearch] = useState("");
+  const [paused, setPaused] = useState(false);
+  const [telegramEnabled, setTelegramEnabled] = useState(false);
+  const [selectedRank, setSelectedRank] = useState<number | null>(6);
+  const [openMenuRank, setOpenMenuRank] = useState<number | null>(6);
+  const [copiedProgram, setCopiedProgram] = useState(false);
+  const [toast, setToast] = useState("Ready");
+  const [theme, setTheme] = useState<ThemeMode>("dark");
+  const radar = useRadarStream();
+
+  const notify = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast("Ready"), 2200);
+  };
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    document.documentElement.style.colorScheme = theme;
+  }, [theme]);
+
+  const visibleAccounts = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    const filtered = radar.accounts.filter((account) => {
+      const riskMatch = riskFilter === "All Risks" || account.risk === riskFilter;
+      const searchMatch =
+        normalizedSearch.length === 0 ||
+        account.account.toLowerCase().includes(normalizedSearch) ||
+        account.wallet.toLowerCase().includes(normalizedSearch) ||
+        account.protocol.toLowerCase().includes(normalizedSearch);
+      return riskMatch && searchMatch;
+    });
+
+    return [...filtered].sort((a, b) => {
+      if (sortOption === "HF DESC") {
+        return (b.hf ?? -1) - (a.hf ?? -1);
+      }
+      if (sortOption === "Size DESC") {
+        return b.collateralUsd + b.debtUsd - (a.collateralUsd + a.debtUsd);
+      }
+      if (sortOption === "Slot DESC") {
+        return b.updatedSlot - a.updatedSlot;
+      }
+      if (sortOption === "Latency ASC") {
+        return a.latencyMs - b.latencyMs;
+      }
+
+      const hfDiff = (a.hf ?? Number.POSITIVE_INFINITY) - (b.hf ?? Number.POSITIVE_INFINITY);
+      if (hfDiff !== 0) return hfDiff;
+      return b.collateralUsd + b.debtUsd - (a.collateralUsd + a.debtUsd);
+    });
+  }, [radar.accounts, riskFilter, search, sortOption]);
+
+  const handleNavSelect = (label: string) => {
+    setActiveNav(label);
+    notify(`${label} selected`);
+  };
+
+  const handleProtocolChange = (value: string) => {
+    if (value !== "marginfi v2") {
+      notify(`${value} adapter is reserved for future integration`);
+      setProtocol("marginfi v2");
+      return;
+    }
+    setProtocol(value);
+    notify("Protocol set to marginfi v2");
+  };
+
+  const handleCopyProgram = () => {
+    const programId = "MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA";
+    void navigator.clipboard?.writeText(programId);
+    setCopiedProgram(true);
+    notify("Program ID copied");
+    window.setTimeout(() => setCopiedProgram(false), 1800);
+  };
+
+  const handleAccountAction = (action: string, account: RiskAccount) => {
+    if (action === "Copy Address") {
+      void navigator.clipboard?.writeText(account.accountFull ?? account.account);
+    }
+    setSelectedRank(account.rank);
+    setOpenMenuRank(null);
+    notify(`${action}: ${account.account}`);
+  };
+
+  const handleHeaderSort = (header: string) => {
+    if (header === "HF") setSortOption(sortOption === "HF DESC" ? "HF ASC, Size DESC" : "HF DESC");
+    if (header === "Collateral (USD)" || header === "Debt (USD)") setSortOption("Size DESC");
+    if (header === "Updated Slot") setSortOption("Slot DESC");
+    if (header === "Latency") setSortOption("Latency ASC");
+  };
+
+  return (
+    <div className={theme === "dark" ? "dark" : ""}>
+      <div className="grid-bg flex min-h-screen bg-slate-100 text-slate-900 transition-colors dark:bg-ink-950 dark:text-slate-100">
+      <Sidebar
+        items={navItems}
+        activeLabel={activeNav}
+        telegramEnabled={telegramEnabled}
+        onSelect={handleNavSelect}
+        onConfigureAlerts={() => {
+          setTelegramEnabled(true);
+          notify("Telegram alert panel opened");
+        }}
+      />
+      <main className="flex min-w-0 flex-1 flex-col">
+        <TopBar
+          stats={radar.topStats}
+          theme={theme}
+          onToggleTheme={() => {
+            setTheme((value) => (value === "dark" ? "light" : "dark"));
+            notify(theme === "dark" ? "Light mode enabled" : "Dark mode enabled");
+          }}
+        />
+        <div className="flex-1 space-y-3 p-3">
+          <SummaryPanels
+            sourceStatus={radar.sourceStatus}
+            thresholds={thresholds}
+            copiedProgram={copiedProgram}
+            onCopyProgram={handleCopyProgram}
+          />
+          <ControlBar
+            protocol={protocol}
+            riskFilter={riskFilter}
+            sortOption={sortOption}
+            refreshInterval={refreshInterval}
+            search={search}
+            paused={paused}
+            telegramEnabled={telegramEnabled}
+            onProtocolChange={handleProtocolChange}
+            onRiskFilterChange={(filter) => {
+              setRiskFilter(filter);
+              notify(`Risk filter: ${filter}`);
+            }}
+            onSortChange={(sort) => {
+              setSortOption(sort);
+              notify(`Sort: ${sort}`);
+            }}
+            onRefreshIntervalChange={(interval) => {
+              setRefreshInterval(interval);
+              notify(`Refresh interval: ${interval}`);
+            }}
+            onSearchChange={(value) => {
+              setSearch(value);
+              setOpenMenuRank(null);
+            }}
+            onTogglePaused={() => {
+              setPaused((value) => !value);
+              notify(paused ? "Live updates resumed" : "Live updates paused");
+            }}
+            onManualRefresh={() => notify("Manual refresh requested")}
+            onToggleTelegram={() => {
+              setTelegramEnabled((value) => !value);
+              notify(telegramEnabled ? "Telegram alerts disabled" : "Telegram alerts enabled");
+            }}
+            onSoon={(feature) => notify(`${feature} is not connected yet`)}
+          />
+          <RiskAccountsTable
+            accounts={visibleAccounts}
+            selectedRank={selectedRank}
+            openMenuRank={openMenuRank}
+            paused={paused}
+            onSelectAccount={(account) => {
+              setSelectedRank(account.rank);
+              setOpenMenuRank(null);
+              notify(`Selected ${account.account}`);
+            }}
+            onToggleMenu={(rank) => {
+              setOpenMenuRank((current) => (current === rank ? null : rank));
+              setSelectedRank(rank);
+            }}
+            onAction={handleAccountAction}
+            onHeaderSort={handleHeaderSort}
+            onPageClick={(direction) => notify(`Pagination ${direction}`)}
+          />
+        </div>
+      </main>
+      <div className="fixed bottom-4 right-4 z-50 min-w-[220px] rounded-md border border-slate-200 bg-white/95 px-4 py-3 text-[12px] text-slate-700 shadow-[0_18px_48px_rgba(2,8,23,0.18)] dark:border-sky-400/20 dark:bg-[#07121b]/95 dark:text-slate-200 dark:shadow-[0_18px_48px_rgba(0,0,0,0.45)]">
+        <div className="mb-1 text-[10px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-500">Interaction</div>
+        {toast}
+      </div>
+      </div>
+    </div>
+  );
+}
+
+export default App;

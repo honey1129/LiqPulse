@@ -1,33 +1,30 @@
-# Python bytecode and caches
+# Python
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.hypothesis/
-
-# Packaging / build artifacts
-build/
-dist/
-*.egg-info/
-htmlcov/
-.coverage
-.coverage.*
-
-# Virtual environments
 .venv/
 venv/
 env/
 ENV/
-
-# Local environment files
-.env
-.env.*
 *.log
 
-# IDE / OS files
+# Frontend
+front/node_modules/
+front/dist/
+front/.vite/
+front/*.tsbuildinfo
+front/vite.config.js
+front/vite.config.d.ts
+front/tailwind.config.js
+front/tailwind.config.d.ts
+front/.env
+front/.env.*
+front/*.local
+
+# Local caches / OS files
+liquidation_radar/__pycache__/
+.DS_Store
 .idea/
 .vscode/
-.DS_Store

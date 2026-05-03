@@ -20,6 +20,39 @@ or:
 python main.py
 ```
 
+## Run API Bridge For Frontend
+
+Backend live WebSocket bridge:
+
+```bash
+python api_server.py
+```
+
+Default frontend stream URL:
+
+```bash
+ws://127.0.0.1:8765
+```
+
+Override API bind:
+
+```bash
+export LIQUIDATION_RADAR_API_HOST=127.0.0.1
+export LIQUIDATION_RADAR_API_PORT=8765
+python api_server.py
+```
+
+Run frontend:
+
+```bash
+cd front
+cp .env.example .env
+npm install
+npm run dev
+```
+
+The frontend connects to `VITE_RADAR_WS_URL`; if the API bridge is offline it falls back to mock data.
+
 ## Replace RPC Endpoint
 
 Single endpoint:
