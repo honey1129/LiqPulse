@@ -259,8 +259,9 @@ class DisabledAccountStateStore:
 
 
 class SqliteAccountStateStore:
-    def __init__(self, db_url: str, base_dir: Path) -> None:
+    def __init__(self, db_url: str, base_dir: Path, history_enabled: bool) -> None:
         self._path = _sqlite_path_from_url(db_url, base_dir)
+        self._history_enabled = history_enabled
 
     async def initialize(self) -> None:
         if str(self._path) == ":memory:":
@@ -303,6 +304,41 @@ class SqliteAccountStateStore:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_account_states_protocol_hf ON account_states(protocol, health_factor, exposure_usd, slot DESC)"
             )
+            if self._history_enabled:
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS account_state_history (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        protocol TEXT NOT NULL,
+                        pubkey TEXT NOT NULL,
+                        group_pk TEXT NOT NULL,
+                        authority TEXT NOT NULL,
+                        slot INTEGER NOT NULL,
+                        collateral_value TEXT NOT NULL,
+                        debt_value TEXT NOT NULL,
+                        exposure_usd TEXT NOT NULL,
+                        health_factor TEXT,
+                        risk_level TEXT NOT NULL,
+                        health_cache_json TEXT NOT NULL,
+                        data_fingerprint TEXT NOT NULL,
+                        risk_fingerprint TEXT NOT NULL,
+                        balances_json TEXT NOT NULL,
+                        received_at_ms INTEGER NOT NULL,
+                        decoded_at_ms INTEGER NOT NULL,
+                        rpc_endpoint TEXT NOT NULL,
+                        recorded_at_ms INTEGER NOT NULL
+                    )
+                    """
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_account_state_history_protocol_pubkey_slot ON account_state_history(protocol, pubkey, slot DESC, recorded_at_ms DESC)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_account_state_history_protocol_risk_slot ON account_state_history(protocol, risk_level, slot DESC)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_account_state_history_recorded ON account_state_history(recorded_at_ms)"
+                )
             conn.commit()
 
     async def load_latest(self, protocol: str, limit: int) -> list[MarginfiAccountState]:
@@ -376,6 +412,18 @@ class SqliteAccountStateStore:
                 """,
                 rows,
             )
+            if self._history_enabled:
+                conn.executemany(
+                    """
+                    INSERT INTO account_state_history (
+                        protocol, pubkey, group_pk, authority, slot,
+                        collateral_value, debt_value, exposure_usd, health_factor,
+                        risk_level, health_cache_json, data_fingerprint, risk_fingerprint,
+                        balances_json, received_at_ms, decoded_at_ms, rpc_endpoint, recorded_at_ms
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    rows,
+                )
             conn.commit()
 
     async def close(self) -> None:
@@ -383,8 +431,9 @@ class SqliteAccountStateStore:
 
 
 class MySqlAccountStateStore:
-    def __init__(self, db_url: str) -> None:
+    def __init__(self, db_url: str, history_enabled: bool) -> None:
         self._settings = _parse_mysql_url(db_url)
+        self._history_enabled = history_enabled
 
     def _connect(self) -> Any:
         try:
@@ -433,6 +482,36 @@ class MySqlAccountStateStore:
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """
                 )
+                if self._history_enabled:
+                    cursor.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS account_state_history (
+                            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                            protocol VARCHAR(32) NOT NULL,
+                            pubkey VARCHAR(64) NOT NULL,
+                            group_pk VARCHAR(64) NOT NULL,
+                            authority VARCHAR(64) NOT NULL,
+                            slot BIGINT NOT NULL,
+                            collateral_value DECIMAL(65,18) NOT NULL,
+                            debt_value DECIMAL(65,18) NOT NULL,
+                            exposure_usd DECIMAL(65,18) NOT NULL,
+                            health_factor DECIMAL(65,18) NULL,
+                            risk_level VARCHAR(24) NOT NULL,
+                            health_cache_json LONGTEXT NOT NULL,
+                            data_fingerprint VARCHAR(64) NOT NULL,
+                            risk_fingerprint VARCHAR(64) NOT NULL,
+                            balances_json LONGTEXT NOT NULL,
+                            received_at_ms BIGINT NOT NULL,
+                            decoded_at_ms BIGINT NOT NULL,
+                            rpc_endpoint VARCHAR(512) NOT NULL,
+                            recorded_at_ms BIGINT NOT NULL,
+                            PRIMARY KEY (id),
+                            KEY idx_account_state_history_protocol_pubkey_slot (protocol, pubkey, slot, recorded_at_ms),
+                            KEY idx_account_state_history_protocol_risk_slot (protocol, risk_level, slot),
+                            KEY idx_account_state_history_recorded (recorded_at_ms)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                        """
+                    )
             conn.commit()
         finally:
             conn.close()
@@ -513,6 +592,18 @@ class MySqlAccountStateStore:
                     """,
                     rows,
                 )
+                if self._history_enabled:
+                    cursor.executemany(
+                        """
+                        INSERT INTO account_state_history (
+                            protocol, pubkey, group_pk, authority, slot,
+                            collateral_value, debt_value, exposure_usd, health_factor,
+                            risk_level, health_cache_json, data_fingerprint, risk_fingerprint,
+                            balances_json, received_at_ms, decoded_at_ms, rpc_endpoint, recorded_at_ms
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        rows,
+                    )
             conn.commit()
         finally:
             conn.close()
@@ -522,8 +613,9 @@ class MySqlAccountStateStore:
 
 
 class PostgresAccountStateStore:
-    def __init__(self, dsn: str) -> None:
+    def __init__(self, dsn: str, history_enabled: bool) -> None:
         self._dsn = dsn
+        self._history_enabled = history_enabled
         self._pool: Any | None = None
 
     async def initialize(self) -> None:
@@ -565,6 +657,41 @@ class PostgresAccountStateStore:
             await conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_account_states_protocol_hf ON account_states(protocol, health_factor, exposure_usd, slot DESC)"
             )
+            if self._history_enabled:
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS account_state_history (
+                        id BIGSERIAL PRIMARY KEY,
+                        protocol TEXT NOT NULL,
+                        pubkey TEXT NOT NULL,
+                        group_pk TEXT NOT NULL,
+                        authority TEXT NOT NULL,
+                        slot BIGINT NOT NULL,
+                        collateral_value NUMERIC NOT NULL,
+                        debt_value NUMERIC NOT NULL,
+                        exposure_usd NUMERIC NOT NULL,
+                        health_factor NUMERIC,
+                        risk_level TEXT NOT NULL,
+                        health_cache_json JSONB NOT NULL,
+                        data_fingerprint TEXT NOT NULL,
+                        risk_fingerprint TEXT NOT NULL,
+                        balances_json JSONB NOT NULL,
+                        received_at_ms BIGINT NOT NULL,
+                        decoded_at_ms BIGINT NOT NULL,
+                        rpc_endpoint TEXT NOT NULL,
+                        recorded_at_ms BIGINT NOT NULL
+                    )
+                    """
+                )
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_account_state_history_protocol_pubkey_slot ON account_state_history(protocol, pubkey, slot DESC, recorded_at_ms DESC)"
+                )
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_account_state_history_protocol_risk_slot ON account_state_history(protocol, risk_level, slot DESC)"
+                )
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_account_state_history_recorded ON account_state_history(recorded_at_ms)"
+                )
 
     async def load_latest(self, protocol: str, limit: int) -> list[MarginfiAccountState]:
         if self._pool is None or limit <= 0:
@@ -657,6 +784,45 @@ class PostgresAccountStateStore:
                     for row in rows
                 ],
             )
+            if self._history_enabled:
+                await conn.executemany(
+                    """
+                    INSERT INTO account_state_history (
+                        protocol, pubkey, group_pk, authority, slot,
+                        collateral_value, debt_value, exposure_usd, health_factor,
+                        risk_level, health_cache_json, data_fingerprint, risk_fingerprint,
+                        balances_json, received_at_ms, decoded_at_ms, rpc_endpoint, recorded_at_ms
+                    ) VALUES (
+                        $1, $2, $3, $4, $5,
+                        $6, $7, $8, $9,
+                        $10, $11::jsonb, $12, $13,
+                        $14::jsonb, $15, $16, $17, $18
+                    )
+                    """,
+                    [
+                        (
+                            row[0],
+                            row[1],
+                            row[2],
+                            row[3],
+                            row[4],
+                            row[5],
+                            row[6],
+                            row[7],
+                            row[8],
+                            row[9],
+                            row[10],
+                            row[11],
+                            row[12],
+                            row[13],
+                            row[14],
+                            row[15],
+                            row[16],
+                            row[17],
+                        )
+                        for row in rows
+                    ],
+                )
 
     async def close(self) -> None:
         if self._pool is not None:
@@ -723,10 +889,10 @@ def build_account_state_store(config: RadarConfig) -> AccountStateStore:
 
     database_url = config.database_url
     if database_url.startswith("sqlite://"):
-        return SqliteAccountStateStore(database_url, Path(__file__).resolve().parent)
+        return SqliteAccountStateStore(database_url, Path(__file__).resolve().parent, config.database_history_enabled)
     if database_url.startswith(("mysql://", "mysql+", "mariadb://", "mariadb+")):
-        return MySqlAccountStateStore(database_url)
+        return MySqlAccountStateStore(database_url, config.database_history_enabled)
     if database_url.startswith("postgres://") or database_url.startswith("postgresql://"):
-        return PostgresAccountStateStore(database_url)
+        return PostgresAccountStateStore(database_url, config.database_history_enabled)
 
     raise ValueError(f"unsupported database url: {database_url}")

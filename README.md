@@ -14,7 +14,7 @@ from the latest known state before new live updates arrive.
 - Live Solana WebSocket subscriptions with reconnect handling.
 - CLI radar view through `main.py`.
 - WebSocket API bridge for the React/Vite frontend through `api_server.py`.
-- Database-backed warm starts with batched state writes.
+- Database-backed warm starts and append-only account history with batched writes.
 - MySQL, SQLite, and PostgreSQL persistence backends.
 
 ## Requirements
@@ -97,10 +97,16 @@ the configured database store.
 
 On startup, LiqPulse:
 
-1. Creates the `account_states` table if it does not exist.
+1. Creates the `account_states` and `account_state_history` tables if needed.
 2. Loads the latest saved states for the active protocol into the ranking engine.
 3. Runs the initial HTTP backfill.
 4. Continues writing decoded live updates in batches.
+
+`account_states` keeps the latest row per account for warm starts.
+`account_state_history` appends each accepted backfill/live state so historical
+trends accumulate from the moment persistence is enabled. Disable append-only
+history with `LIQUIDATION_RADAR_DB_HISTORY_ENABLED=false` if storage growth is a
+concern.
 
 If persistence fails and `LIQUIDATION_RADAR_DB_REQUIRED=false`, the service logs
 the error and continues without database warm starts. Set
@@ -124,7 +130,8 @@ GRANT ALL PRIVILEGES ON liqpulse.* TO 'liqpulse'@'127.0.0.1';
 FLUSH PRIVILEGES;
 ```
 
-The `account_states` table is created automatically by the application.
+The application creates the `account_states` and `account_state_history` tables
+automatically.
 
 ### SQLite
 
@@ -134,7 +141,7 @@ For a local file-backed store:
 LIQUIDATION_RADAR_DATABASE_URL=sqlite:///data/liqpulse.sqlite3
 ```
 
-The `data/` directory and SQLite table are created automatically.
+The `data/` directory and SQLite tables are created automatically.
 
 ### PostgreSQL
 
@@ -193,6 +200,7 @@ LIQUIDATION_RADAR_DB_WARM_START_LIMIT=50000
 LIQUIDATION_RADAR_DB_WRITE_QUEUE_SIZE=20000
 LIQUIDATION_RADAR_DB_WRITE_BATCH_SIZE=250
 LIQUIDATION_RADAR_DB_FLUSH_INTERVAL_MS=500
+LIQUIDATION_RADAR_DB_HISTORY_ENABLED=true
 
 LIQUIDATION_RADAR_MIN_DISPLAY_HF=0
 LIQUIDATION_RADAR_HIGH_RISK_HF=1.05

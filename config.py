@@ -151,6 +151,7 @@ class RadarConfig:
     database_write_queue_size: int
     database_write_batch_size: int
     database_flush_interval_ms: int
+    database_history_enabled: bool
     backfill_enabled: bool
     backfill_required: bool
     backfill_retry_count: int
@@ -212,6 +213,7 @@ class RadarConfig:
             database_write_queue_size=_get_int("LIQUIDATION_RADAR_DB_WRITE_QUEUE_SIZE", 20000),
             database_write_batch_size=_get_int("LIQUIDATION_RADAR_DB_WRITE_BATCH_SIZE", 250),
             database_flush_interval_ms=_get_int("LIQUIDATION_RADAR_DB_FLUSH_INTERVAL_MS", 500),
+            database_history_enabled=_get_bool("LIQUIDATION_RADAR_DB_HISTORY_ENABLED", True),
             backfill_enabled=_get_bool("LIQUIDATION_RADAR_BACKFILL_ENABLED", True),
             backfill_required=_get_bool("LIQUIDATION_RADAR_BACKFILL_REQUIRED", False),
             backfill_retry_count=_get_int("LIQUIDATION_RADAR_BACKFILL_RETRY_COUNT", 3),
