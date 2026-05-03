@@ -13,11 +13,12 @@ import websockets
 
 from backfill import InitialBackfillRunner
 from config import RadarConfig
-from pipeline import NoopNotifier, process_updates
 from models import AccountUpdate, MarginfiAccountState, RadarStats, RiskLevel
+from pipeline import NoopNotifier, process_updates
 from protocols import ProtocolAdapter, build_protocol_adapter
 from ranking_engine import RankingEngine
 from risk_engine import RiskEngine
+from state_store import AccountStateWriter, NoopStateSink, build_account_state_store
 from utils import monotonic_ms, short_pubkey
 from websocket_client import MarginfiWebSocketClient
 
@@ -211,10 +212,42 @@ async def run() -> None:
     risk_engine = RiskEngine(config)
     ranking_engine = RankingEngine(config)
     ws_client = MarginfiWebSocketClient(config, protocol, updates)
+    state_store = build_account_state_store(config)
+    state_sink: NoopStateSink | AccountStateWriter = NoopStateSink()
+
+    if config.database_enabled:
+        try:
+            await state_store.initialize()
+            cached_states = await state_store.load_latest(protocol.protocol_name, config.database_warm_start_limit)
+            loaded = ranking_engine.seed(cached_states)
+            LOGGER.info(
+                "database warm start protocol=%s loaded=%s limit=%s source=%s",
+                protocol.protocol_name,
+                loaded,
+                config.database_warm_start_limit,
+                config.database_url,
+            )
+            state_sink = AccountStateWriter(
+                state_store,
+                protocol.protocol_name,
+                config.database_write_queue_size,
+                config.database_write_batch_size,
+                config.database_flush_interval_ms,
+            )
+        except Exception as exc:
+            if config.database_required:
+                raise
+            LOGGER.exception("database persistence disabled: %s", exc)
+
     api = RadarApiServer(config, protocol, ranking_engine, updates)
-    backfill = InitialBackfillRunner(config, protocol, risk_engine, ranking_engine)
+    backfill = InitialBackfillRunner(config, protocol, risk_engine, ranking_engine, state_sink)
 
     ws_task = asyncio.create_task(ws_client.run(stop_event), name="solana-websocket")
+    writer_task = (
+        asyncio.create_task(state_sink.run(stop_event), name="state-writer")
+        if isinstance(state_sink, AccountStateWriter)
+        else None
+    )
     await backfill.run(stop_event)
 
     host = _get_host()
@@ -224,9 +257,10 @@ async def run() -> None:
     async with websockets.serve(api.handler, host, port, ping_interval=20, ping_timeout=20):
         tasks = [
             ws_task,
+            *([writer_task] if writer_task is not None else []),
             *[
                 asyncio.create_task(
-                    process_updates(updates, protocol, risk_engine, ranking_engine, NoopNotifier(), stop_event),
+                    process_updates(updates, protocol, risk_engine, ranking_engine, NoopNotifier(), stop_event, state_sink),
                     name=f"risk-worker-{idx}",
                 )
                 for idx in range(max(1, config.risk_worker_count))
@@ -240,6 +274,7 @@ async def run() -> None:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+            await state_store.close()
 
 
 def main() -> None:

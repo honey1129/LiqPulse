@@ -15,6 +15,7 @@ from pipeline import NoopNotifier, process_account_update
 from protocols import ProtocolAdapter
 from ranking_engine import RankingEngine
 from risk_engine import RiskEngine
+from state_store import StateSink
 from utils import discriminator_base58, monotonic_ms
 
 LOGGER = logging.getLogger(__name__)
@@ -49,11 +50,13 @@ class InitialBackfillRunner:
         protocol: ProtocolAdapter,
         risk_engine: RiskEngine,
         ranking_engine: RankingEngine,
+        state_sink: StateSink | None = None,
     ) -> None:
         self._config = config
         self._protocol = protocol
         self._risk_engine = risk_engine
         self._ranking_engine = ranking_engine
+        self._state_sink = state_sink
 
     async def run(self, stop_event: asyncio.Event) -> None:
         if not self._config.backfill_enabled:
@@ -135,7 +138,14 @@ class InitialBackfillRunner:
                 subscription_id=None,
             )
             seen += 1
-            if await process_account_update(update, self._protocol, self._risk_engine, self._ranking_engine, notifier):
+            if await process_account_update(
+                update,
+                self._protocol,
+                self._risk_engine,
+                self._ranking_engine,
+                notifier,
+                self._state_sink,
+            ):
                 accepted += 1
 
             if index % 250 == 0:

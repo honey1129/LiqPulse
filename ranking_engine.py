@@ -29,6 +29,20 @@ class RankingEngine:
             self._last_rpc_endpoint = state.rpc_endpoint
         return True
 
+    def seed(self, states: list[MarginfiAccountState]) -> int:
+        loaded = 0
+        for state in states:
+            previous = self._accounts.peek(state.pubkey)
+            if previous is not None and previous.slot > 0 and state.slot > 0 and state.slot < previous.slot:
+                continue
+
+            self._accounts.put(state.pubkey, state)
+            self._last_slot = max(self._last_slot, state.slot)
+            if state.rpc_endpoint:
+                self._last_rpc_endpoint = state.rpc_endpoint
+            loaded += 1
+        return loaded
+
     def mark_skipped(self) -> None:
         self._updates_skipped += 1
 

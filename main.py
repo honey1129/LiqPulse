@@ -11,6 +11,7 @@ from pipeline import NoopNotifier, process_updates
 from protocols import ProtocolAdapter, build_protocol_adapter
 from ranking_engine import RankingEngine
 from risk_engine import RiskEngine
+from state_store import AccountStateWriter, NoopStateSink, build_account_state_store
 from utils import clear_screen, format_decimal, format_usd, monotonic_ms, short_pubkey
 from websocket_client import MarginfiWebSocketClient
 
@@ -91,7 +92,34 @@ async def run() -> None:
     ranking_engine = RankingEngine(config)
     notifier = NoopNotifier()
     ws_client = MarginfiWebSocketClient(config, protocol, updates)
-    backfill = InitialBackfillRunner(config, protocol, risk_engine, ranking_engine)
+    state_store = build_account_state_store(config)
+    state_sink: NoopStateSink | AccountStateWriter = NoopStateSink()
+
+    if config.database_enabled:
+        try:
+            await state_store.initialize()
+            cached_states = await state_store.load_latest(protocol.protocol_name, config.database_warm_start_limit)
+            loaded = ranking_engine.seed(cached_states)
+            LOGGER.info(
+                "database warm start protocol=%s loaded=%s limit=%s source=%s",
+                protocol.protocol_name,
+                loaded,
+                config.database_warm_start_limit,
+                config.database_url,
+            )
+            state_sink = AccountStateWriter(
+                state_store,
+                protocol.protocol_name,
+                config.database_write_queue_size,
+                config.database_write_batch_size,
+                config.database_flush_interval_ms,
+            )
+        except Exception as exc:
+            if config.database_required:
+                raise
+            LOGGER.exception("database persistence disabled: %s", exc)
+
+    backfill = InitialBackfillRunner(config, protocol, risk_engine, ranking_engine, state_sink)
 
     LOGGER.info(
         "radar starting protocol=%s ws_endpoints=%s http_endpoints=%s workers=%s cache=%s backfill=%s",
@@ -107,13 +135,16 @@ async def run() -> None:
         asyncio.create_task(ws_client.run(stop_event), name="websocket-client"),
     ]
 
+    if isinstance(state_sink, AccountStateWriter):
+        tasks.append(asyncio.create_task(state_sink.run(stop_event), name="state-writer"))
+
     await backfill.run(stop_event)
 
     tasks.extend(
         [
             *[
                 asyncio.create_task(
-                    process_updates(updates, protocol, risk_engine, ranking_engine, notifier, stop_event),
+                    process_updates(updates, protocol, risk_engine, ranking_engine, notifier, stop_event, state_sink),
                     name=f"account-processor-{idx}",
                 )
                 for idx in range(max(1, config.risk_worker_count))
@@ -128,6 +159,7 @@ async def run() -> None:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        await state_store.close()
 
 
 def main() -> None:

@@ -9,6 +9,7 @@ from models import AccountUpdate, MarginfiAccountState, RiskLevel
 from protocols import ProtocolAdapter
 from ranking_engine import RankingEngine
 from risk_engine import RiskEngine
+from state_store import StateSink
 
 LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ async def process_account_update(
     risk_engine: RiskEngine,
     ranking_engine: RankingEngine,
     notifier: RiskNotifier,
+    state_sink: StateSink | None = None,
 ) -> bool:
     try:
         decoded = protocol.decode(update)
@@ -41,6 +43,12 @@ async def process_account_update(
         if not ranking_engine.upsert(evaluated):
             ranking_engine.mark_skipped()
             return False
+
+        if state_sink is not None:
+            try:
+                await state_sink.publish(evaluated)
+            except Exception:
+                LOGGER.exception("failed to enqueue account state persistence")
 
         if evaluated.risk_level in {RiskLevel.LIQUIDATABLE, RiskLevel.HIGH}:
             await notifier.publish(evaluated)
@@ -64,6 +72,7 @@ async def process_updates(
     ranking_engine: RankingEngine,
     notifier: RiskNotifier,
     stop_event: asyncio.Event,
+    state_sink: StateSink | None = None,
 ) -> None:
     while not stop_event.is_set():
         try:
@@ -72,6 +81,6 @@ async def process_updates(
             continue
 
         try:
-            await process_account_update(update, protocol, risk_engine, ranking_engine, notifier)
+            await process_account_update(update, protocol, risk_engine, ranking_engine, notifier, state_sink)
         finally:
             updates.task_done()

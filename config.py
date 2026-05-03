@@ -95,6 +95,7 @@ def load_env_files() -> None:
 
 load_env_files()
 
+
 def _get_decimal(name: str, default: str) -> Decimal:
     return Decimal(os.getenv(name, default))
 
@@ -143,6 +144,13 @@ class RadarConfig:
     reconnect_initial_delay_s: float
     reconnect_max_delay_s: float
     parse_active_balances: bool
+    database_enabled: bool
+    database_required: bool
+    database_url: str
+    database_warm_start_limit: int
+    database_write_queue_size: int
+    database_write_batch_size: int
+    database_flush_interval_ms: int
     backfill_enabled: bool
     backfill_required: bool
     backfill_retry_count: int
@@ -163,6 +171,7 @@ class RadarConfig:
             or _split_csv(os.getenv("LIQUIDATION_RADAR_HTTP_ENDPOINTS"))
             or tuple(_normalize_http_endpoint(endpoint) for endpoint in ws_endpoints)
         )
+        account_cache_size = _get_int("LIQUIDATION_RADAR_ACCOUNT_CACHE_SIZE", 50000)
 
         return cls(
             protocol=os.getenv("LIQUIDATION_RADAR_PROTOCOL", "marginfi").lower(),
@@ -174,7 +183,7 @@ class RadarConfig:
             refresh_interval_ms=_get_int("LIQUIDATION_RADAR_REFRESH_MS", 500),
             queue_maxsize=_get_int("LIQUIDATION_RADAR_QUEUE_MAXSIZE", 20000),
             risk_worker_count=_get_int("LIQUIDATION_RADAR_RISK_WORKERS", 1),
-            account_cache_size=_get_int("LIQUIDATION_RADAR_ACCOUNT_CACHE_SIZE", 50000),
+            account_cache_size=account_cache_size,
             fingerprint_cache_size=_get_int("LIQUIDATION_RADAR_FINGERPRINT_CACHE_SIZE", 75000),
             account_data_size=_get_int("MARGINFI_ACCOUNT_DATA_SIZE", MARGINFI_ACCOUNT_DATA_SIZE),
             min_display_hf=_get_decimal("LIQUIDATION_RADAR_MIN_DISPLAY_HF", "0"),
@@ -192,6 +201,17 @@ class RadarConfig:
             reconnect_initial_delay_s=_get_float("LIQUIDATION_RADAR_RECONNECT_INITIAL_DELAY", 0.25),
             reconnect_max_delay_s=_get_float("LIQUIDATION_RADAR_RECONNECT_MAX_DELAY", 8.0),
             parse_active_balances=_get_bool("LIQUIDATION_RADAR_PARSE_BALANCES", True),
+            database_enabled=_get_bool("LIQUIDATION_RADAR_DB_ENABLED", True),
+            database_required=_get_bool("LIQUIDATION_RADAR_DB_REQUIRED", False),
+            database_url=(
+                os.getenv("LIQUIDATION_RADAR_DATABASE_URL")
+                or os.getenv("DATABASE_URL")
+                or "sqlite:///data/liqpulse.sqlite3"
+            ),
+            database_warm_start_limit=_get_int("LIQUIDATION_RADAR_DB_WARM_START_LIMIT", account_cache_size),
+            database_write_queue_size=_get_int("LIQUIDATION_RADAR_DB_WRITE_QUEUE_SIZE", 20000),
+            database_write_batch_size=_get_int("LIQUIDATION_RADAR_DB_WRITE_BATCH_SIZE", 250),
+            database_flush_interval_ms=_get_int("LIQUIDATION_RADAR_DB_FLUSH_INTERVAL_MS", 500),
             backfill_enabled=_get_bool("LIQUIDATION_RADAR_BACKFILL_ENABLED", True),
             backfill_required=_get_bool("LIQUIDATION_RADAR_BACKFILL_REQUIRED", False),
             backfill_retry_count=_get_int("LIQUIDATION_RADAR_BACKFILL_RETRY_COUNT", 3),

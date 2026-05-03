@@ -12,6 +12,10 @@ ENV/
 .env
 .env.*
 !.env.example
+data/
+*.sqlite
+*.sqlite3
+*.db
 
 # Frontend
 front/node_modules/

@@ -68,6 +68,29 @@ npm run dev
 
 The frontend connects to `VITE_RADAR_WS_URL`; if the API bridge is offline it falls back to mock data.
 
+## Database Persistence
+
+The backend now keeps the latest marginfi account states in a database and reloads them on startup before live WebSocket updates arrive.
+The table is created automatically on first launch.
+
+MySQL store:
+
+```bash
+LIQUIDATION_RADAR_DATABASE_URL=mysql://liqpulse:password@127.0.0.1:3306/liqpulse?charset=utf8mb4
+```
+
+Default local SQLite store:
+
+```bash
+LIQUIDATION_RADAR_DATABASE_URL=sqlite:///data/liqpulse.sqlite3
+```
+
+PostgreSQL example:
+
+```bash
+LIQUIDATION_RADAR_DATABASE_URL=postgresql://liqpulse:password@127.0.0.1:5432/liqpulse
+```
+
 ## Initial Backfill
 
 On startup the service now performs a full marginfi account snapshot through HTTP RPC `getProgramAccounts`, then keeps the live stream hot through WebSocket subscriptions.
@@ -111,6 +134,13 @@ LIQUIDATION_RADAR_MAX_DISPLAY_HF=1.10
 LIQUIDATION_RADAR_REQUIRE_USABLE_CACHE=true
 LIQUIDATION_RADAR_ACCOUNT_CACHE_SIZE=50000
 LIQUIDATION_RADAR_FINGERPRINT_CACHE_SIZE=75000
+LIQUIDATION_RADAR_DB_ENABLED=true
+LIQUIDATION_RADAR_DB_REQUIRED=false
+LIQUIDATION_RADAR_DATABASE_URL=mysql://liqpulse:password@127.0.0.1:3306/liqpulse?charset=utf8mb4
+LIQUIDATION_RADAR_DB_WARM_START_LIMIT=50000
+LIQUIDATION_RADAR_DB_WRITE_QUEUE_SIZE=20000
+LIQUIDATION_RADAR_DB_WRITE_BATCH_SIZE=250
+LIQUIDATION_RADAR_DB_FLUSH_INTERVAL_MS=500
 LIQUIDATION_RADAR_RISK_WORKERS=1
 SOLANA_COMMITMENT=processed
 LIQUIDATION_RADAR_BACKFILL_ENABLED=true
