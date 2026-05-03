@@ -8,6 +8,21 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## Environment File
+
+Copy the template and edit it:
+
+```bash
+cp .env.example .env
+```
+
+The backend loads `.env` automatically on startup. For frontend dev:
+
+```bash
+cd front
+cp .env.example .env
+```
+
 ## Run
 
 ```bash
@@ -60,67 +75,57 @@ On startup the service now performs a full marginfi account snapshot through HTT
 If your WebSocket endpoint does not expose HTTP on the same host, set:
 
 ```bash
-export SOLANA_HTTP_ENDPOINTS="https://your-http-rpc.example.com"
+SOLANA_HTTP_ENDPOINTS=https://your-http-rpc.example.com
 ```
 
 Fallback RPCs are supported:
 
 ```bash
-export SOLANA_HTTP_ENDPOINTS="https://rpc-a.example.com,https://rpc-b.example.com"
+SOLANA_HTTP_ENDPOINTS=https://rpc-a.example.com,https://rpc-b.example.com
 ```
 
 ## Replace RPC Endpoint
 
 Single endpoint:
 
+Edit `.env`:
+
 ```bash
-export SOLANA_WS_ENDPOINTS="wss://your-mainnet-rpc.example.com"
-export SOLANA_HTTP_ENDPOINTS="https://your-mainnet-rpc.example.com"
-python main.py
+SOLANA_WS_ENDPOINTS=wss://your-mainnet-rpc.example.com
+SOLANA_HTTP_ENDPOINTS=https://your-mainnet-rpc.example.com
 ```
 
 Multiple fallback endpoints:
 
 ```bash
-export SOLANA_WS_ENDPOINTS="wss://rpc-a.example.com,wss://rpc-b.example.com,wss://rpc-c.example.com"
-python main.py
+SOLANA_WS_ENDPOINTS=wss://rpc-a.example.com,wss://rpc-b.example.com,wss://rpc-c.example.com
 ```
 
 ## Useful Env
 
 ```bash
-export MARGINFI_PROGRAM_ID="MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA"
-export LIQUIDATION_RADAR_TOP_N=20
-export LIQUIDATION_RADAR_REFRESH_MS=500
-export LIQUIDATION_RADAR_MAX_DISPLAY_HF=1.10
-export LIQUIDATION_RADAR_REQUIRE_USABLE_CACHE=true
-export LIQUIDATION_RADAR_ACCOUNT_CACHE_SIZE=50000
-export LIQUIDATION_RADAR_FINGERPRINT_CACHE_SIZE=75000
-export LIQUIDATION_RADAR_RISK_WORKERS=1
-export SOLANA_COMMITMENT=processed
-export LIQUIDATION_RADAR_BACKFILL_ENABLED=true
-export LIQUIDATION_RADAR_BACKFILL_REQUIRED=false
-export LIQUIDATION_RADAR_BACKFILL_RETRY_COUNT=3
-export LIQUIDATION_RADAR_BACKFILL_TIMEOUT=30
+MARGINFI_PROGRAM_ID=MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA
+LIQUIDATION_RADAR_TOP_N=20
+LIQUIDATION_RADAR_REFRESH_MS=500
+LIQUIDATION_RADAR_MAX_DISPLAY_HF=1.10
+LIQUIDATION_RADAR_REQUIRE_USABLE_CACHE=true
+LIQUIDATION_RADAR_ACCOUNT_CACHE_SIZE=50000
+LIQUIDATION_RADAR_FINGERPRINT_CACHE_SIZE=75000
+LIQUIDATION_RADAR_RISK_WORKERS=1
+SOLANA_COMMITMENT=processed
+LIQUIDATION_RADAR_BACKFILL_ENABLED=true
+LIQUIDATION_RADAR_BACKFILL_REQUIRED=false
+LIQUIDATION_RADAR_BACKFILL_RETRY_COUNT=3
+LIQUIDATION_RADAR_BACKFILL_TIMEOUT=30
 ```
 
 ## WebSocket Runtime
 
-```bash
-export LIQUIDATION_RADAR_WS_OPEN_TIMEOUT=10
-export LIQUIDATION_RADAR_WS_SUBSCRIBE_TIMEOUT=10
-export LIQUIDATION_RADAR_WS_RECEIVE_TIMEOUT=60
-export LIQUIDATION_RADAR_WS_HEARTBEAT_INTERVAL=20
-export LIQUIDATION_RADAR_WS_HEARTBEAT_TIMEOUT=10
-export LIQUIDATION_RADAR_RECONNECT_INITIAL_DELAY=0.25
-export LIQUIDATION_RADAR_RECONNECT_MAX_DELAY=8
-```
+Use `.env` values instead of shell exports.
 
 ## Protocol Adapter
 
-```bash
-export LIQUIDATION_RADAR_PROTOCOL=marginfi
-```
+Set `LIQUIDATION_RADAR_PROTOCOL=marginfi` in `.env`.
 
 `solend` and `kamino` adapter slots are reserved in `protocols.py`.
 
@@ -128,7 +133,4 @@ export LIQUIDATION_RADAR_PROTOCOL=marginfi
 
 The default decoder reads marginfi v2 `HealthCache` maintenance asset/liability values:
 
-```bash
-export MARGINFI_COLLATERAL_OFFSET=1872
-export MARGINFI_DEBT_OFFSET=1888
-```
+Set the offsets in `.env` if your program layout differs.

@@ -11,6 +11,7 @@ ENV/
 *.log
 .env
 .env.*
+!.env.example
 
 # Frontend
 front/node_modules/
@@ -23,6 +24,7 @@ front/tailwind.config.js
 front/tailwind.config.d.ts
 front/.env
 front/.env.*
+!front/.env.example
 front/*.local
 
 # Local caches / OS files

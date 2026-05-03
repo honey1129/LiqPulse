@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { navItems, thresholds } from "./data/mockData";
 import { ControlBar } from "./components/ControlBar";
 import { RiskAccountsTable } from "./components/RiskAccountsTable";
 import { Sidebar } from "./components/Sidebar";
 import { SummaryPanels } from "./components/SummaryPanels";
 import { TopBar } from "./components/TopBar";
+import { navItems, thresholds } from "./data/mockData";
 import { useRadarStream } from "./hooks/useRadarStream";
 import type { RefreshInterval, RiskAccount, RiskFilter, SortOption, ThemeMode } from "./types";
 
@@ -105,6 +105,12 @@ function App() {
     if (header === "Latency") setSortOption("Latency ASC");
   };
 
+  const handleThemeToggle = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    notify(nextTheme === "dark" ? "Dark mode enabled" : "Light mode enabled");
+  };
+
   return (
     <div className={theme === "dark" ? "dark" : ""}>
       <div className="grid-bg flex min-h-screen bg-slate-100 text-slate-900 transition-colors dark:bg-ink-950 dark:text-slate-100">
@@ -119,14 +125,7 @@ function App() {
           }}
         />
         <main className="flex min-w-0 flex-1 flex-col">
-          <TopBar
-            stats={radar.topStats}
-            theme={theme}
-            onToggleTheme={() => {
-              setTheme((value) => (value === "dark" ? "light" : "dark"));
-              notify(theme === "dark" ? "Light mode enabled" : "Dark mode enabled");
-            }}
-          />
+          <TopBar stats={radar.topStats} theme={theme} onToggleTheme={handleThemeToggle} />
           <div className="flex-1 space-y-3 p-3">
             <SummaryPanels
               sourceStatus={radar.sourceStatus}
@@ -160,13 +159,19 @@ function App() {
                 setOpenMenuRank(null);
               }}
               onTogglePaused={() => {
-                setPaused((value) => !value);
-                notify(paused ? "Live updates resumed" : "Live updates paused");
+                setPaused((value) => {
+                  const next = !value;
+                  notify(next ? "Live updates paused" : "Live updates resumed");
+                  return next;
+                });
               }}
               onManualRefresh={() => notify("Manual refresh requested")}
               onToggleTelegram={() => {
-                setTelegramEnabled((value) => !value);
-                notify(telegramEnabled ? "Telegram alerts disabled" : "Telegram alerts enabled");
+                setTelegramEnabled((value) => {
+                  const next = !value;
+                  notify(next ? "Telegram alerts enabled" : "Telegram alerts disabled");
+                  return next;
+                });
               }}
               onSoon={(feature) => notify(`${feature} is not connected yet`)}
             />
@@ -191,7 +196,9 @@ function App() {
           </div>
         </main>
         <div className="fixed bottom-4 right-4 z-50 min-w-[220px] rounded-md border border-slate-200 bg-white/95 px-4 py-3 text-[12px] text-slate-700 shadow-[0_18px_48px_rgba(2,8,23,0.18)] dark:border-sky-400/20 dark:bg-[#07121b]/95 dark:text-slate-200 dark:shadow-[0_18px_48px_rgba(0,0,0,0.45)]">
-          <div className="mb-1 text-[10px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-500">Interaction</div>
+          <div className="mb-1 text-[10px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-500">
+            Interaction
+          </div>
           {toast}
         </div>
       </div>

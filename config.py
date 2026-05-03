@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from decimal import Decimal
+from pathlib import Path
 
 
 DEFAULT_MARGINFI_PROGRAM_ID = "MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA"
@@ -42,6 +43,57 @@ def _normalize_http_endpoint(endpoint: str) -> str:
         return "http://" + endpoint.removeprefix("ws://")
     return endpoint
 
+
+def _valid_env_key(key: str) -> bool:
+    if not key:
+        return False
+    if not (key[0].isalpha() or key[0] == "_"):
+        return False
+    return all(char.isalnum() or char == "_" for char in key)
+
+
+def _parse_env_value(raw: str) -> str:
+    value = raw.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value.split(" #", 1)[0].strip()
+
+
+def _load_env_file(path: Path) -> None:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("export "):
+            stripped = stripped.removeprefix("export ").lstrip()
+
+        key, separator, value = stripped.partition("=")
+        key = key.strip()
+        if separator != "=" or not _valid_env_key(key):
+            continue
+
+        os.environ.setdefault(key, _parse_env_value(value))
+
+
+def load_env_files() -> None:
+    custom_env_file = os.getenv("LIQUIDATION_RADAR_ENV_FILE")
+    if custom_env_file:
+        _load_env_file(Path(custom_env_file).expanduser())
+        return
+
+    root = Path(__file__).resolve().parent
+    for path in (root / ".env", root / ".env.runtime"):
+        if path.is_file():
+            _load_env_file(path)
+            return
+
+
+load_env_files()
 
 def _get_decimal(name: str, default: str) -> Decimal:
     return Decimal(os.getenv(name, default))
