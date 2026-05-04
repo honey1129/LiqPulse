@@ -7,6 +7,15 @@ import { RiskAccountsTable } from "./components/RiskAccountsTable";
 import { Sidebar } from "./components/Sidebar";
 import { SummaryPanels } from "./components/SummaryPanels";
 import { TopBar } from "./components/TopBar";
+import {
+  AccountsView,
+  AlertsView,
+  HealthView,
+  MarketDataView,
+  PositionsView,
+  RpcNodesView,
+  SettingsView,
+} from "./components/NavigationViews";
 import { navItems, thresholds } from "./data/mockData";
 import { useRadarStream } from "./hooks/useRadarStream";
 import type { RefreshInterval, RiskAccount, RiskFilter, SortOption, ThemeMode } from "./types";
@@ -27,7 +36,7 @@ const loadStoredWatchlist = () => {
 };
 
 function App() {
-  const [activeNav, setActiveNav] = useState("Workbench");
+  const [activeNav, setActiveNav] = useState(navItems[0].label);
   const [protocol, setProtocol] = useState("marginfi v2");
   const [riskFilter, setRiskFilter] = useState<RiskFilter>("All Risks");
   const [sortOption, setSortOption] = useState<SortOption>("HF ASC, Size DESC");
@@ -99,6 +108,8 @@ function App() {
   }, [radar.accounts, riskFilter, search, sortOption]);
 
   const handleNavSelect = (label: string) => {
+    closeAccountPanels();
+    setOpenMenuRank(null);
     setActiveNav(label);
     notify(`${label} selected`);
   };
@@ -121,9 +132,53 @@ function App() {
     window.setTimeout(() => setCopiedProgram(false), 1800);
   };
 
-  const handleAccountAction = (action: string, account: RiskAccount) => {
-    const key = accountKey(account);
+  const handleTelegramToggle = () => {
+    setTelegramEnabled((value) => {
+      const next = !value;
+      notify(next ? "Telegram alerts enabled" : "Telegram alerts disabled");
+      return next;
+    });
+  };
 
+  const openDetails = (account: RiskAccount) => {
+    closeAccountPanels();
+    setDetailsAccount(account);
+    setSelectedRank(account.rank);
+    setOpenMenuRank(null);
+    notify(`Details opened for ${account.account}`);
+  };
+
+  const openPositions = (account: RiskAccount) => {
+    closeAccountPanels();
+    setPositionsAccount(account);
+    setSelectedRank(account.rank);
+    setOpenMenuRank(null);
+    notify(`Positions opened for ${account.account}`);
+  };
+
+  const openHistory = (account: RiskAccount) => {
+    closeAccountPanels();
+    radar.requestAccountHistory(account);
+    setSelectedRank(account.rank);
+    setOpenMenuRank(null);
+    notify(`History requested for ${account.account}`);
+  };
+
+  const toggleWatchlist = (account: RiskAccount) => {
+    const key = accountKey(account);
+    const exists = watchlistSet.has(key);
+    setWatchlist((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]));
+    setSelectedRank(account.rank);
+    setOpenMenuRank(null);
+    notify(exists ? `Removed ${account.account} from watchlist` : `Added ${account.account} to watchlist`);
+  };
+
+  const clearWatchlist = () => {
+    setWatchlist([]);
+    notify("Watchlist cleared");
+  };
+
+  const handleAccountAction = (action: string, account: RiskAccount) => {
     if (action === "Copy Address") {
       void navigator.clipboard?.writeText(account.accountFull ?? account.account);
       setSelectedRank(account.rank);
@@ -132,36 +187,19 @@ function App() {
       return;
     }
     if (action === "View Details") {
-      closeAccountPanels();
-      setDetailsAccount(account);
-      setSelectedRank(account.rank);
-      setOpenMenuRank(null);
-      notify(`Details opened for ${account.account}`);
+      openDetails(account);
       return;
     }
     if (action === "View Positions") {
-      closeAccountPanels();
-      setPositionsAccount(account);
-      setSelectedRank(account.rank);
-      setOpenMenuRank(null);
-      notify(`Positions opened for ${account.account}`);
+      openPositions(account);
       return;
     }
     if (action === "Account History") {
-      setDetailsAccount(null);
-      setPositionsAccount(null);
-      radar.requestAccountHistory(account);
-      notify(`History requested for ${account.account}`);
-      setOpenMenuRank(null);
-      setSelectedRank(account.rank);
+      openHistory(account);
       return;
     }
     if (action === "Add to Watchlist" || action === "Remove from Watchlist") {
-      const exists = watchlistSet.has(key);
-      setWatchlist((current) => (exists ? current.filter((item) => item !== key) : [...current, key]));
-      notify(exists ? `Removed ${account.account} from watchlist` : `Added ${account.account} to watchlist`);
-      setSelectedRank(account.rank);
-      setOpenMenuRank(null);
+      toggleWatchlist(account);
       return;
     }
     setSelectedRank(account.rank);
@@ -182,6 +220,132 @@ function App() {
     notify(nextTheme === "dark" ? "Dark mode enabled" : "Light mode enabled");
   };
 
+  const viewProps = {
+    accounts: radar.accounts,
+    sourceStatus: radar.sourceStatus,
+    topStats: radar.topStats,
+    streamStatus: radar.status,
+    watchlist: watchlistSet,
+    telegramEnabled,
+    theme,
+    refreshInterval,
+    paused,
+    onOpenDetails: openDetails,
+    onOpenPositions: openPositions,
+    onOpenHistory: openHistory,
+    onToggleWatchlist: toggleWatchlist,
+    onToggleTelegram: handleTelegramToggle,
+    onToggleTheme: handleThemeToggle,
+    onClearWatchlist: clearWatchlist,
+  };
+
+  const sharedControlBar = (
+    <ControlBar
+      protocol={protocol}
+      riskFilter={riskFilter}
+      sortOption={sortOption}
+      refreshInterval={refreshInterval}
+      search={search}
+      paused={paused}
+      telegramEnabled={telegramEnabled}
+      onProtocolChange={handleProtocolChange}
+      onRiskFilterChange={(filter) => {
+        setRiskFilter(filter);
+        notify(`Risk filter: ${filter}`);
+      }}
+      onSortChange={(sort) => {
+        setSortOption(sort);
+        notify(`Sort: ${sort}`);
+      }}
+      onRefreshIntervalChange={(interval) => {
+        setRefreshInterval(interval);
+        notify(`Refresh interval: ${interval}`);
+      }}
+      onSearchChange={(value) => {
+        setSearch(value);
+        setOpenMenuRank(null);
+      }}
+      onTogglePaused={() => {
+        setPaused((value) => {
+          const next = !value;
+          notify(next ? "Live updates paused" : "Live updates resumed");
+          return next;
+        });
+      }}
+      onManualRefresh={() => notify("Manual refresh requested")}
+      onToggleTelegram={handleTelegramToggle}
+      onSoon={(feature) => notify(`${feature} is not connected yet`)}
+    />
+  );
+
+  const sharedRiskAccountsTable = (
+    <RiskAccountsTable
+      accounts={visibleAccounts}
+      selectedRank={selectedRank}
+      openMenuRank={openMenuRank}
+      paused={paused}
+      watchlist={watchlistSet}
+      onSelectAccount={(account) => {
+        setSelectedRank(account.rank);
+        setOpenMenuRank(null);
+        notify(`Selected ${account.account}`);
+      }}
+      onToggleMenu={(rank) => {
+        setOpenMenuRank((current) => (current === rank ? null : rank));
+        setSelectedRank(rank);
+      }}
+      onAction={handleAccountAction}
+      onHeaderSort={handleHeaderSort}
+      onPageClick={(direction) => notify(`Pagination ${direction}`)}
+    />
+  );
+
+  const renderContent = () => {
+    switch (activeNav) {
+      case "Workbench":
+        return (
+          <>
+            <SummaryPanels
+              sourceStatus={radar.sourceStatus}
+              thresholds={thresholds}
+              copiedProgram={copiedProgram}
+              onCopyProgram={handleCopyProgram}
+            />
+            {sharedControlBar}
+            {sharedRiskAccountsTable}
+          </>
+        );
+      case "Risk Accounts":
+        return (
+          <>
+            {sharedControlBar}
+            {sharedRiskAccountsTable}
+          </>
+        );
+      case "Alerts":
+        return <AlertsView {...viewProps} />;
+      case "Positions":
+        return <PositionsView {...viewProps} />;
+      case "Accounts":
+        return <AccountsView {...viewProps} />;
+      case "Market Data":
+        return <MarketDataView {...viewProps} />;
+      case "Health":
+        return <HealthView {...viewProps} />;
+      case "RPC & Nodes":
+        return <RpcNodesView {...viewProps} />;
+      case "Settings":
+        return <SettingsView {...viewProps} />;
+      default:
+        return (
+          <>
+            {sharedControlBar}
+            {sharedRiskAccountsTable}
+          </>
+        );
+    }
+  };
+
   return (
     <div className={theme === "dark" ? "dark" : ""}>
       <div className="grid-bg flex min-h-screen bg-slate-100 text-slate-900 transition-colors dark:bg-ink-950 dark:text-slate-100">
@@ -191,81 +355,16 @@ function App() {
           telegramEnabled={telegramEnabled}
           onSelect={handleNavSelect}
           onConfigureAlerts={() => {
+            closeAccountPanels();
+            setOpenMenuRank(null);
+            setActiveNav("Alerts");
             setTelegramEnabled(true);
-            notify("Telegram alert panel opened");
+            notify("Alerts panel opened");
           }}
         />
         <main className="flex min-w-0 flex-1 flex-col">
           <TopBar stats={radar.topStats} theme={theme} onToggleTheme={handleThemeToggle} />
-          <div className="flex-1 space-y-3 p-3">
-            <SummaryPanels
-              sourceStatus={radar.sourceStatus}
-              thresholds={thresholds}
-              copiedProgram={copiedProgram}
-              onCopyProgram={handleCopyProgram}
-            />
-            <ControlBar
-              protocol={protocol}
-              riskFilter={riskFilter}
-              sortOption={sortOption}
-              refreshInterval={refreshInterval}
-              search={search}
-              paused={paused}
-              telegramEnabled={telegramEnabled}
-              onProtocolChange={handleProtocolChange}
-              onRiskFilterChange={(filter) => {
-                setRiskFilter(filter);
-                notify(`Risk filter: ${filter}`);
-              }}
-              onSortChange={(sort) => {
-                setSortOption(sort);
-                notify(`Sort: ${sort}`);
-              }}
-              onRefreshIntervalChange={(interval) => {
-                setRefreshInterval(interval);
-                notify(`Refresh interval: ${interval}`);
-              }}
-              onSearchChange={(value) => {
-                setSearch(value);
-                setOpenMenuRank(null);
-              }}
-              onTogglePaused={() => {
-                setPaused((value) => {
-                  const next = !value;
-                  notify(next ? "Live updates paused" : "Live updates resumed");
-                  return next;
-                });
-              }}
-              onManualRefresh={() => notify("Manual refresh requested")}
-              onToggleTelegram={() => {
-                setTelegramEnabled((value) => {
-                  const next = !value;
-                  notify(next ? "Telegram alerts enabled" : "Telegram alerts disabled");
-                  return next;
-                });
-              }}
-              onSoon={(feature) => notify(`${feature} is not connected yet`)}
-            />
-            <RiskAccountsTable
-              accounts={visibleAccounts}
-              selectedRank={selectedRank}
-              openMenuRank={openMenuRank}
-              paused={paused}
-              watchlist={watchlistSet}
-              onSelectAccount={(account) => {
-                setSelectedRank(account.rank);
-                setOpenMenuRank(null);
-                notify(`Selected ${account.account}`);
-              }}
-              onToggleMenu={(rank) => {
-                setOpenMenuRank((current) => (current === rank ? null : rank));
-                setSelectedRank(rank);
-              }}
-              onAction={handleAccountAction}
-              onHeaderSort={handleHeaderSort}
-              onPageClick={(direction) => notify(`Pagination ${direction}`)}
-            />
-          </div>
+          <div className="flex-1 space-y-3 p-3">{renderContent()}</div>
         </main>
         {detailsAccount && (
           <AccountDetailsModal
