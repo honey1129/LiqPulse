@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { ControlBar } from "./components/ControlBar";
+import { AccountDetailsModal } from "./components/AccountDetailsModal";
 import { AccountHistoryModal } from "./components/AccountHistoryModal";
+import { AccountPositionsModal } from "./components/AccountPositionsModal";
 import { RiskAccountsTable } from "./components/RiskAccountsTable";
 import { Sidebar } from "./components/Sidebar";
 import { SummaryPanels } from "./components/SummaryPanels";
@@ -8,6 +10,21 @@ import { TopBar } from "./components/TopBar";
 import { navItems, thresholds } from "./data/mockData";
 import { useRadarStream } from "./hooks/useRadarStream";
 import type { RefreshInterval, RiskAccount, RiskFilter, SortOption, ThemeMode } from "./types";
+
+const WATCHLIST_STORAGE_KEY = "liqpulse-watchlist";
+
+const accountKey = (account: RiskAccount) => account.accountFull ?? account.account;
+
+const loadStoredWatchlist = () => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(WATCHLIST_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+};
 
 function App() {
   const [activeNav, setActiveNav] = useState("Workbench");
@@ -23,7 +40,11 @@ function App() {
   const [copiedProgram, setCopiedProgram] = useState(false);
   const [toast, setToast] = useState("Ready");
   const [theme, setTheme] = useState<ThemeMode>("dark");
+  const [detailsAccount, setDetailsAccount] = useState<RiskAccount | null>(null);
+  const [positionsAccount, setPositionsAccount] = useState<RiskAccount | null>(null);
+  const [watchlist, setWatchlist] = useState<string[]>(loadStoredWatchlist);
   const radar = useRadarStream();
+  const watchlistSet = useMemo(() => new Set(watchlist), [watchlist]);
 
   const notify = (message: string) => {
     setToast(message);
@@ -34,6 +55,16 @@ function App() {
     document.documentElement.classList.toggle("dark", theme === "dark");
     document.documentElement.style.colorScheme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    window.localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(watchlist));
+  }, [watchlist]);
+
+  const closeAccountPanels = () => {
+    setDetailsAccount(null);
+    setPositionsAccount(null);
+    radar.clearAccountHistory();
+  };
 
   const visibleAccounts = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -91,14 +122,46 @@ function App() {
   };
 
   const handleAccountAction = (action: string, account: RiskAccount) => {
+    const key = accountKey(account);
+
     if (action === "Copy Address") {
       void navigator.clipboard?.writeText(account.accountFull ?? account.account);
+      setSelectedRank(account.rank);
+      setOpenMenuRank(null);
+      notify(`Copied ${account.account}`);
+      return;
+    }
+    if (action === "View Details") {
+      closeAccountPanels();
+      setDetailsAccount(account);
+      setSelectedRank(account.rank);
+      setOpenMenuRank(null);
+      notify(`Details opened for ${account.account}`);
+      return;
+    }
+    if (action === "View Positions") {
+      closeAccountPanels();
+      setPositionsAccount(account);
+      setSelectedRank(account.rank);
+      setOpenMenuRank(null);
+      notify(`Positions opened for ${account.account}`);
+      return;
     }
     if (action === "Account History") {
+      setDetailsAccount(null);
+      setPositionsAccount(null);
       radar.requestAccountHistory(account);
       notify(`History requested for ${account.account}`);
       setOpenMenuRank(null);
       setSelectedRank(account.rank);
+      return;
+    }
+    if (action === "Add to Watchlist" || action === "Remove from Watchlist") {
+      const exists = watchlistSet.has(key);
+      setWatchlist((current) => (exists ? current.filter((item) => item !== key) : [...current, key]));
+      notify(exists ? `Removed ${account.account} from watchlist` : `Added ${account.account} to watchlist`);
+      setSelectedRank(account.rank);
+      setOpenMenuRank(null);
       return;
     }
     setSelectedRank(account.rank);
@@ -188,6 +251,7 @@ function App() {
               selectedRank={selectedRank}
               openMenuRank={openMenuRank}
               paused={paused}
+              watchlist={watchlistSet}
               onSelectAccount={(account) => {
                 setSelectedRank(account.rank);
                 setOpenMenuRank(null);
@@ -203,6 +267,25 @@ function App() {
             />
           </div>
         </main>
+        {detailsAccount && (
+          <AccountDetailsModal
+            account={detailsAccount}
+            watchlisted={watchlistSet.has(accountKey(detailsAccount))}
+            onClose={() => {
+              setDetailsAccount(null);
+              notify("Details panel closed");
+            }}
+          />
+        )}
+        {positionsAccount && (
+          <AccountPositionsModal
+            account={positionsAccount}
+            onClose={() => {
+              setPositionsAccount(null);
+              notify("Positions panel closed");
+            }}
+          />
+        )}
         {radar.history.account && (
           <AccountHistoryModal
             history={radar.history}

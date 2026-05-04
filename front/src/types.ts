@@ -33,6 +33,14 @@ export type RiskAccount = {
   latencyMs: number;
   trend: number[];
   rpcEndpoint?: string;
+  balances?: AccountBalance[];
+};
+
+export type AccountBalance = {
+  bankPk: string;
+  assetShares: string;
+  liabilityShares: string;
+  lastUpdate: number;
 };
 
 export type Threshold = {

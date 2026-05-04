@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, ChevronsUpDown, MoreVertical } from "lucide-react";
+import { Bookmark, ChevronLeft, ChevronRight, ChevronsUpDown, MoreVertical } from "lucide-react";
 import type { RiskAccount } from "../types";
 import { formatHf, formatUsd } from "../lib/format";
 import { ActionMenu } from "./ActionMenu";
@@ -10,6 +10,7 @@ type RiskAccountsTableProps = {
   selectedRank: number | null;
   openMenuRank: number | null;
   paused: boolean;
+  watchlist: Set<string>;
   onSelectAccount: (account: RiskAccount) => void;
   onToggleMenu: (rank: number) => void;
   onAction: (action: string, account: RiskAccount) => void;
@@ -30,6 +31,7 @@ export function RiskAccountsTable({
   selectedRank,
   openMenuRank,
   paused,
+  watchlist,
   onSelectAccount,
   onToggleMenu,
   onAction,
@@ -62,6 +64,7 @@ export function RiskAccountsTable({
         <tbody className="font-mono text-[11px]">
           {accounts.map((account) => {
             const selected = selectedRank === account.rank;
+            const watchlisted = watchlist.has(account.accountFull ?? account.account);
             return (
               <tr
                 key={account.rank}
@@ -77,7 +80,16 @@ export function RiskAccountsTable({
                 <td className="h-[29px] px-3 text-slate-700 dark:text-slate-300">
                   {selected ? <span className="inline-block h-2 w-2 rounded-full bg-sky-300" /> : account.rank}
                 </td>
-                <td className="px-3 text-slate-700 dark:text-slate-200">{account.account}</td>
+                <td className="px-3 text-slate-700 dark:text-slate-200">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate">{account.account}</span>
+                    {watchlisted && (
+                      <span title="Watchlisted">
+                        <Bookmark className="h-3.5 w-3.5 shrink-0 text-sky-500" />
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-3 text-slate-700 dark:text-slate-300">{account.wallet}</td>
                 <td className="px-3 text-slate-700 dark:text-slate-200">{account.protocol}</td>
                 <td className="px-3 text-right text-slate-800 dark:text-slate-100">{formatUsd(account.collateralUsd)}</td>
@@ -102,7 +114,7 @@ export function RiskAccountsTable({
                   >
                     <MoreVertical className="h-4 w-4" />
                   </button>
-                  {openMenuRank === account.rank && <ActionMenu account={account} onAction={onAction} />}
+                  {openMenuRank === account.rank && <ActionMenu account={account} watchlisted={watchlisted} onAction={onAction} />}
                 </td>
               </tr>
             );

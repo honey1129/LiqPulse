@@ -69,6 +69,7 @@ const normalizeAccount = (account: RiskAccount): RiskAccount => ({
   ...account,
   risk: normalizeRisk(account.risk),
   trend: account.trend?.length ? account.trend : [account.hf ?? 0],
+  balances: account.balances ?? [],
 });
 
 const buildTopStats = (snapshot: ApiSnapshot): RadarStat[] => {

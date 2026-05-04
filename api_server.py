@@ -89,6 +89,44 @@ def _account_payload(rank: int, account: MarginfiAccountState, trend: list[float
         "latencyMs": account.latency_ms,
         "trend": trend,
         "rpcEndpoint": account.rpc_endpoint,
+        "balances": [
+            {
+                "bankPk": balance.bank_pk,
+                "assetShares": str(balance.asset_shares),
+                "liabilityShares": str(balance.liability_shares),
+                "lastUpdate": balance.last_update,
+            }
+            for balance in account.balances
+        ],
+    }
+
+
+def _history_point_payload(record: AccountStateHistoryRecord) -> dict[str, Any]:
+    state = record.state
+    return {
+        "slot": state.slot,
+        "recordedAtMs": record.recorded_at_ms,
+        "collateralUsd": _decimal_float(state.collateral_value) or 0.0,
+        "debtUsd": _decimal_float(state.debt_value) or 0.0,
+        "exposureUsd": _decimal_float(state.exposure_usd) or 0.0,
+        "hf": _decimal_float(state.health_factor),
+        "risk": _risk_label(state.risk_level),
+        "rpcEndpoint": state.rpc_endpoint,
+    }
+
+
+def _history_response_payload(
+    request_id: str,
+    pubkey: str,
+    records: list[AccountStateHistoryRecord],
+) -> dict[str, Any]:
+    return {
+        "type": "account_history",
+        "requestId": request_id,
+        "account": short_pubkey(pubkey),
+        "accountFull": pubkey,
+        "count": len(records),
+        "points": [_history_point_payload(record) for record in records],
     }
 
 

@@ -1,24 +1,25 @@
 import { Bookmark, Copy, Eye, History, Layers3 } from "lucide-react";
 import type { RiskAccount } from "../types";
 
-const actions = [
-  { label: "View Details", icon: Eye },
-  { label: "View Positions", icon: Layers3 },
-  { label: "Account History", icon: History },
-  { label: "Add to Watchlist", icon: Bookmark },
-  { label: "Copy Address", icon: Copy },
-];
-
 type ActionMenuProps = {
   account: RiskAccount;
+  watchlisted: boolean;
   onAction: (action: string, account: RiskAccount) => void;
 };
 
-export function ActionMenu({ account, onAction }: ActionMenuProps) {
+const baseActions = [
+  { label: "View Details", icon: Eye },
+  { label: "View Positions", icon: Layers3 },
+  { label: "Account History", icon: History },
+];
+
+export function ActionMenu({ account, watchlisted, onAction }: ActionMenuProps) {
+  const actions = [...baseActions, { label: watchlisted ? "Remove from Watchlist" : "Add to Watchlist", icon: Bookmark }, { label: "Copy Address", icon: Copy }];
+
   return (
     <div
       onClick={(event) => event.stopPropagation()}
-      className="absolute right-2 top-8 z-20 w-[158px] rounded-md border border-slate-200 bg-white p-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.18)] dark:border-sky-400/[0.18] dark:bg-[#08131c] dark:shadow-[0_18px_48px_rgba(0,0,0,0.45)]"
+      className="absolute right-2 top-8 z-20 w-[192px] rounded-md border border-slate-200 bg-white p-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.18)] dark:border-sky-400/[0.18] dark:bg-[#08131c] dark:shadow-[0_18px_48px_rgba(0,0,0,0.45)]"
     >
       {actions.map((action) => {
         const Icon = action.icon;
