@@ -104,6 +104,12 @@ class MarginfiAccountState:
 
 
 @dataclass(frozen=True, slots=True)
+class AccountStateHistoryRecord:
+    state: MarginfiAccountState
+    recorded_at_ms: int
+
+
+@dataclass(frozen=True, slots=True)
 class RadarStats:
     accounts_total: int = 0
     risk_accounts: int = 0

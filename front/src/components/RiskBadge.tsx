@@ -10,6 +10,7 @@ const riskStyles: Record<RiskLevel, string> = {
   Warning: "border-yellow-300 bg-yellow-50 text-yellow-700 dark:border-yellow-300/[0.35] dark:bg-yellow-400/10 dark:text-yellow-300",
   Healthy: "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/[0.35] dark:bg-emerald-400/10 dark:text-emerald-300",
   "No Debt": "border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-300",
+  Invalid: "border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-300",
 };
 
 export function RiskBadge({ risk }: RiskBadgeProps) {

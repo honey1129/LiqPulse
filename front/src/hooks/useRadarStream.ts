@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { riskAccounts as mockAccounts, sourceStatus as mockSourceStatus, topStats as mockTopStats } from "../data/mockData";
-import type { RadarStat, RiskAccount, RiskLevel, SourceStatus, StreamStatus } from "../types";
+import type { AccountHistoryPoint, AccountHistoryState, RadarStat, RiskAccount, RiskLevel, SourceStatus, StreamStatus } from "../types";
 
 type ApiStats = {
   accountsTotal: number;
@@ -31,12 +31,25 @@ type ApiSnapshot = {
   accounts: RiskAccount[];
 };
 
+type ApiAccountHistory = {
+  type: "account_history";
+  requestId: string;
+  account: string;
+  accountFull: string;
+  count: number;
+  points: AccountHistoryPoint[];
+  error?: string;
+};
+
 type RadarStreamState = {
   accounts: RiskAccount[];
   topStats: RadarStat[];
   sourceStatus: SourceStatus[];
   status: StreamStatus;
   snapshot: ApiSnapshot | null;
+  history: AccountHistoryState;
+  requestAccountHistory: (account: RiskAccount, limit?: number) => void;
+  clearAccountHistory: () => void;
 };
 
 const fallbackUrl = "ws://127.0.0.1:8765";
@@ -48,6 +61,7 @@ const normalizeRisk = (risk: string): RiskLevel => {
   if (risk === "High Risk") return "High Risk";
   if (risk === "Warning") return "Warning";
   if (risk === "Healthy") return "Healthy";
+  if (risk === "Invalid") return "Invalid";
   return "No Debt";
 };
 
@@ -93,8 +107,45 @@ const buildSourceStatus = (snapshot: ApiSnapshot | null, status: StreamStatus): 
 export function useRadarStream(): RadarStreamState {
   const [snapshot, setSnapshot] = useState<ApiSnapshot | null>(null);
   const [status, setStatus] = useState<StreamStatus>("connecting");
+  const [history, setHistory] = useState<AccountHistoryState>({ status: "idle", account: null, points: [] });
   const hasSnapshotRef = useRef(false);
+  const socketRef = useRef<WebSocket | null>(null);
+  const historyRequestRef = useRef<{ requestId: string; account: RiskAccount } | null>(null);
   const url = import.meta.env.VITE_RADAR_WS_URL || fallbackUrl;
+
+  const requestAccountHistory = useCallback((account: RiskAccount, limit = 120) => {
+    const pubkey = account.accountFull;
+    if (!pubkey) {
+      setHistory({
+        status: "error",
+        account,
+        points: [],
+        error: "Full account address is unavailable for history lookup.",
+      });
+      return;
+    }
+
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      setHistory({
+        status: "error",
+        account,
+        points: [],
+        error: "Live stream is not connected.",
+      });
+      return;
+    }
+
+    const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    historyRequestRef.current = { requestId, account };
+    setHistory({ status: "loading", account, points: [] });
+    socket.send(JSON.stringify({ type: "account_history", requestId, pubkey, limit }));
+  }, []);
+
+  const clearAccountHistory = useCallback(() => {
+    historyRequestRef.current = null;
+    setHistory({ status: "idle", account: null, points: [] });
+  }, []);
 
   useEffect(() => {
     let closed = false;
@@ -105,6 +156,7 @@ export function useRadarStream(): RadarStreamState {
     const connect = () => {
       setStatus(attempt === 0 ? "connecting" : "reconnecting");
       socket = new WebSocket(url);
+      socketRef.current = socket;
 
       socket.onopen = () => {
         attempt = 0;
@@ -113,11 +165,23 @@ export function useRadarStream(): RadarStreamState {
 
       socket.onmessage = (event) => {
         try {
-          const nextSnapshot = JSON.parse(event.data) as ApiSnapshot;
-          if (nextSnapshot.type === "snapshot") {
+          const message = JSON.parse(event.data) as ApiSnapshot | ApiAccountHistory;
+          if (message.type === "snapshot") {
             hasSnapshotRef.current = true;
-            setSnapshot(nextSnapshot);
+            setSnapshot(message);
             setStatus("connected");
+            return;
+          }
+          if (message.type === "account_history") {
+            const pending = historyRequestRef.current;
+            if (pending && pending.requestId === message.requestId) {
+              setHistory({
+                status: message.error ? "error" : "ready",
+                account: pending.account,
+                points: message.points ?? [],
+                error: message.error,
+              });
+            }
           }
         } catch {
           setStatus("reconnecting");
@@ -126,6 +190,7 @@ export function useRadarStream(): RadarStreamState {
 
       socket.onclose = () => {
         if (closed) return;
+        if (socketRef.current === socket) socketRef.current = null;
         attempt += 1;
         setStatus(hasSnapshotRef.current ? "reconnecting" : "mock");
         const delay = Math.min(1000 * 2 ** Math.min(attempt, 4), 8000);
@@ -142,6 +207,7 @@ export function useRadarStream(): RadarStreamState {
     return () => {
       closed = true;
       if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+      if (socketRef.current === socket) socketRef.current = null;
       socket?.close();
     };
   }, [url]);
@@ -154,6 +220,9 @@ export function useRadarStream(): RadarStreamState {
         sourceStatus: buildSourceStatus(null, status),
         status,
         snapshot,
+        history,
+        requestAccountHistory,
+        clearAccountHistory,
       };
     }
 
@@ -163,6 +232,9 @@ export function useRadarStream(): RadarStreamState {
       sourceStatus: buildSourceStatus(snapshot, status),
       status,
       snapshot,
+      history,
+      requestAccountHistory,
+      clearAccountHistory,
     };
-  }, [snapshot, status]);
+  }, [clearAccountHistory, history, requestAccountHistory, snapshot, status]);
 }

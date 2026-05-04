@@ -13,12 +13,12 @@ import websockets
 
 from backfill import InitialBackfillRunner
 from config import RadarConfig
-from models import AccountUpdate, MarginfiAccountState, RadarStats, RiskLevel
+from models import AccountStateHistoryRecord, AccountUpdate, MarginfiAccountState, RadarStats, RiskLevel
 from pipeline import NoopNotifier, process_updates
 from protocols import ProtocolAdapter, build_protocol_adapter
 from ranking_engine import RankingEngine
 from risk_engine import RiskEngine
-from state_store import AccountStateWriter, NoopStateSink, build_account_state_store
+from state_store import AccountStateStore, AccountStateWriter, NoopStateSink, build_account_state_store
 from utils import monotonic_ms, short_pubkey
 from websocket_client import MarginfiWebSocketClient
 
@@ -92,6 +92,35 @@ def _account_payload(rank: int, account: MarginfiAccountState, trend: list[float
     }
 
 
+def _history_point_payload(record: AccountStateHistoryRecord) -> dict[str, Any]:
+    state = record.state
+    return {
+        "slot": state.slot,
+        "recordedAtMs": record.recorded_at_ms,
+        "collateralUsd": _decimal_float(state.collateral_value) or 0.0,
+        "debtUsd": _decimal_float(state.debt_value) or 0.0,
+        "exposureUsd": _decimal_float(state.exposure_usd) or 0.0,
+        "hf": _decimal_float(state.health_factor),
+        "risk": _risk_label(state.risk_level),
+        "rpcEndpoint": state.rpc_endpoint,
+    }
+
+
+def _history_response_payload(
+    request_id: str,
+    pubkey: str,
+    records: list[AccountStateHistoryRecord],
+) -> dict[str, Any]:
+    return {
+        "type": "account_history",
+        "requestId": request_id,
+        "account": short_pubkey(pubkey),
+        "accountFull": pubkey,
+        "count": len(records),
+        "points": [_history_point_payload(record) for record in records],
+    }
+
+
 def _snapshot_payload(
     ranking_engine: RankingEngine,
     config: RadarConfig,
@@ -145,11 +174,13 @@ class RadarApiServer:
         protocol: ProtocolAdapter,
         ranking_engine: RankingEngine,
         updates: asyncio.Queue[AccountUpdate],
+        state_store: AccountStateStore,
     ) -> None:
         self._config = config
         self._protocol = protocol
         self._ranking_engine = ranking_engine
         self._updates = updates
+        self._state_store = state_store
         self._clients: set[Any] = set()
         self._trends: dict[str, RiskTrend] = defaultdict(lambda: deque(maxlen=14))
 
@@ -159,11 +190,60 @@ class RadarApiServer:
         try:
             if self._ranking_engine.stats().accounts_total > 0:
                 await websocket.send(self.snapshot_json())
-            async for _ in websocket:
-                pass
+            async for message in websocket:
+                await self._handle_client_message(websocket, message)
         finally:
             self._clients.discard(websocket)
             LOGGER.info("frontend disconnected clients=%s", len(self._clients))
+
+    async def _handle_client_message(self, websocket: Any, message: Any) -> None:
+        try:
+            payload = json.loads(message)
+        except (TypeError, json.JSONDecodeError):
+            return
+
+        if not isinstance(payload, dict) or payload.get("type") != "account_history":
+            return
+
+        request_id = str(payload.get("requestId", ""))
+        pubkey = str(payload.get("pubkey") or payload.get("accountFull") or "")
+        try:
+            limit = min(max(int(payload.get("limit", 120)), 1), 500)
+        except (TypeError, ValueError):
+            limit = 120
+
+        if not pubkey:
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "account_history",
+                        "requestId": request_id,
+                        "accountFull": "",
+                        "count": 0,
+                        "points": [],
+                        "error": "pubkey is required",
+                    },
+                    separators=(",", ":"),
+                )
+            )
+            return
+
+        try:
+            records = await self._state_store.load_history(self._protocol.protocol_name, pubkey, limit)
+            response = _history_response_payload(request_id, pubkey, records)
+        except Exception as exc:
+            LOGGER.exception("failed to load account history account=%s", pubkey)
+            response = {
+                "type": "account_history",
+                "requestId": request_id,
+                "account": short_pubkey(pubkey),
+                "accountFull": pubkey,
+                "count": 0,
+                "points": [],
+                "error": str(exc),
+            }
+
+        await websocket.send(json.dumps(response, separators=(",", ":")))
 
     def snapshot_json(self) -> str:
         payload = _snapshot_payload(
@@ -239,7 +319,7 @@ async def run() -> None:
                 raise
             LOGGER.exception("database persistence disabled: %s", exc)
 
-    api = RadarApiServer(config, protocol, ranking_engine, updates)
+    api = RadarApiServer(config, protocol, ranking_engine, updates, state_store)
     backfill = InitialBackfillRunner(config, protocol, risk_engine, ranking_engine, state_sink)
 
     ws_task = asyncio.create_task(ws_client.run(stop_event), name="solana-websocket")

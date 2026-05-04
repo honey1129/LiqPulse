@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from typing import Any, Protocol, runtime_checkable
 
 from config import RadarConfig
-from models import BalanceSnapshot, HealthCacheState, MarginfiAccountState, RiskLevel
+from models import AccountStateHistoryRecord, BalanceSnapshot, HealthCacheState, MarginfiAccountState, RiskLevel
 
 LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +34,9 @@ class AccountStateStore(Protocol):
         ...
 
     async def load_latest(self, protocol: str, limit: int) -> list[MarginfiAccountState]:
+        ...
+
+    async def load_history(self, protocol: str, pubkey: str, limit: int) -> list[AccountStateHistoryRecord]:
         ...
 
     async def save_states(self, protocol: str, states: list[MarginfiAccountState]) -> None:
@@ -181,6 +184,13 @@ def _row_to_state(record: Mapping[str, Any]) -> MarginfiAccountState:
     )
 
 
+def _row_to_history_record(record: Mapping[str, Any]) -> AccountStateHistoryRecord:
+    return AccountStateHistoryRecord(
+        state=_row_to_state(record),
+        recorded_at_ms=int(record.get("recorded_at_ms", 0)),
+    )
+
+
 def _sqlite_path_from_url(url: str, base_dir: Path) -> Path:
     raw = url.removeprefix("sqlite:///") if url.startswith("sqlite:///") else url.removeprefix("sqlite://")
     if raw in {"", ":memory:"}:
@@ -249,6 +259,9 @@ class DisabledAccountStateStore:
         return None
 
     async def load_latest(self, protocol: str, limit: int) -> list[MarginfiAccountState]:
+        return []
+
+    async def load_history(self, protocol: str, pubkey: str, limit: int) -> list[AccountStateHistoryRecord]:
         return []
 
     async def save_states(self, protocol: str, states: list[MarginfiAccountState]) -> None:
@@ -373,6 +386,31 @@ class SqliteAccountStateStore:
                 (protocol, limit),
             ).fetchall()
         return [_row_to_state(_mapping_from_row(row)) for row in rows]
+
+    async def load_history(self, protocol: str, pubkey: str, limit: int) -> list[AccountStateHistoryRecord]:
+        if not self._history_enabled:
+            return []
+        return await asyncio.to_thread(self._load_history_sync, protocol, pubkey, limit)
+
+    def _load_history_sync(self, protocol: str, pubkey: str, limit: int) -> list[AccountStateHistoryRecord]:
+        if limit <= 0 or not pubkey:
+            return []
+
+        with sqlite3.connect(self._path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM account_state_history
+                WHERE protocol = ? AND pubkey = ?
+                ORDER BY slot DESC, recorded_at_ms DESC
+                LIMIT ?
+                """,
+                (protocol, pubkey, limit),
+            ).fetchall()
+        records = [_row_to_history_record(_mapping_from_row(row)) for row in rows]
+        records.reverse()
+        return records
 
     async def save_states(self, protocol: str, states: list[MarginfiAccountState]) -> None:
         if not states:
@@ -553,6 +591,35 @@ class MySqlAccountStateStore:
             conn.close()
         return [_row_to_state(_mapping_from_row(row)) for row in rows]
 
+    async def load_history(self, protocol: str, pubkey: str, limit: int) -> list[AccountStateHistoryRecord]:
+        if not self._history_enabled:
+            return []
+        return await asyncio.to_thread(self._load_history_sync, protocol, pubkey, limit)
+
+    def _load_history_sync(self, protocol: str, pubkey: str, limit: int) -> list[AccountStateHistoryRecord]:
+        if limit <= 0 or not pubkey:
+            return []
+
+        conn = self._connect()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT *
+                    FROM account_state_history
+                    WHERE protocol = %s AND pubkey = %s
+                    ORDER BY slot DESC, recorded_at_ms DESC
+                    LIMIT %s
+                    """,
+                    (protocol, pubkey, limit),
+                )
+                rows = cursor.fetchall()
+        finally:
+            conn.close()
+        records = [_row_to_history_record(_mapping_from_row(row)) for row in rows]
+        records.reverse()
+        return records
+
     async def save_states(self, protocol: str, states: list[MarginfiAccountState]) -> None:
         if not states:
             return None
@@ -721,6 +788,26 @@ class PostgresAccountStateStore:
                 limit,
             )
         return [_row_to_state(_mapping_from_row(row)) for row in rows]
+
+    async def load_history(self, protocol: str, pubkey: str, limit: int) -> list[AccountStateHistoryRecord]:
+        if not self._history_enabled or self._pool is None or limit <= 0 or not pubkey:
+            return []
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT *
+                FROM account_state_history
+                WHERE protocol = $1 AND pubkey = $2
+                ORDER BY slot DESC, recorded_at_ms DESC
+                LIMIT $3
+                """,
+                protocol,
+                pubkey,
+                limit,
+            )
+        records = [_row_to_history_record(_mapping_from_row(row)) for row in rows]
+        records.reverse()
+        return records
 
     async def save_states(self, protocol: str, states: list[MarginfiAccountState]) -> None:
         if self._pool is None or not states:

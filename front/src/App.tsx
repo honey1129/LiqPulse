@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ControlBar } from "./components/ControlBar";
+import { AccountHistoryModal } from "./components/AccountHistoryModal";
 import { RiskAccountsTable } from "./components/RiskAccountsTable";
 import { Sidebar } from "./components/Sidebar";
 import { SummaryPanels } from "./components/SummaryPanels";
@@ -92,6 +93,13 @@ function App() {
   const handleAccountAction = (action: string, account: RiskAccount) => {
     if (action === "Copy Address") {
       void navigator.clipboard?.writeText(account.accountFull ?? account.account);
+    }
+    if (action === "Account History") {
+      radar.requestAccountHistory(account);
+      notify(`History requested for ${account.account}`);
+      setOpenMenuRank(null);
+      setSelectedRank(account.rank);
+      return;
     }
     setSelectedRank(account.rank);
     setOpenMenuRank(null);
@@ -195,6 +203,15 @@ function App() {
             />
           </div>
         </main>
+        {radar.history.account && (
+          <AccountHistoryModal
+            history={radar.history}
+            onClose={() => {
+              radar.clearAccountHistory();
+              notify("History panel closed");
+            }}
+          />
+        )}
         <div className="fixed bottom-4 right-4 z-50 min-w-[220px] rounded-md border border-slate-200 bg-white/95 px-4 py-3 text-[12px] text-slate-700 shadow-[0_18px_48px_rgba(2,8,23,0.18)] dark:border-sky-400/20 dark:bg-[#07121b]/95 dark:text-slate-200 dark:shadow-[0_18px_48px_rgba(0,0,0,0.45)]">
           <div className="mb-1 text-[10px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-500">
             Interaction

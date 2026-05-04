@@ -12,6 +12,7 @@ const strokeByRisk: Record<RiskLevel, string> = {
   Warning: "#facc15",
   Healthy: "#31d472",
   "No Debt": "#94a3b8",
+  Invalid: "#94a3b8",
 };
 
 export function Sparkline({ data, risk }: SparklineProps) {
@@ -27,4 +28,3 @@ export function Sparkline({ data, risk }: SparklineProps) {
     </div>
   );
 }
-
