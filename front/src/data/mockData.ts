@@ -7,7 +7,6 @@ import {
   Network,
   Settings,
   UserRound,
-  WalletCards,
 } from "lucide-react";
 import type { NavItem, RadarStat, RiskAccount, SourceStatus, Threshold } from "../types";
 
@@ -21,7 +20,6 @@ export const navItems: NavItem[] = [
   { label: "Accounts", icon: UserRound },
   { label: "Market Data", icon: LineChart },
   { label: "Health", icon: HeartPulse },
-  { label: "RPC & Nodes", icon: WalletCards },
   { label: "Settings", icon: Settings },
 ];
 

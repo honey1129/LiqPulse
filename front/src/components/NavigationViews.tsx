@@ -2,16 +2,10 @@ import {
   Activity,
   Bell,
   Bookmark,
-  DatabaseZap,
   Eye,
-  HeartPulse,
   Layers3,
-  LineChart,
-  Network,
   Settings,
   ShieldCheck,
-  UserRound,
-  WalletCards,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { RadarStat, RiskAccount, SourceStatus, StreamStatus, ThemeMode } from "../types";
@@ -259,40 +253,6 @@ export function HealthView({ accounts, sourceStatus, topStats, streamStatus }: V
             <Metric key={item.label} label={item.label} value={item.value} />
           ))}
         </div>
-      </Panel>
-    </div>
-  );
-}
-
-export function RpcNodesView({ accounts, sourceStatus }: ViewProps) {
-  const endpoints = new Map<string, number>();
-  for (const account of accounts) {
-    const endpoint = account.rpcEndpoint || "unknown";
-    endpoints.set(endpoint, (endpoints.get(endpoint) ?? 0) + 1);
-  }
-
-  return (
-    <div className="grid gap-3 lg:grid-cols-[320px_1fr]">
-      <Panel title="Connection">
-        <div className="space-y-2">
-          {sourceStatus.map((item) => (
-            <Metric key={item.label} label={item.label} value={item.value} tone={item.kind === "success" ? "green" : "blue"} />
-          ))}
-        </div>
-      </Panel>
-      <Panel title="RPC Endpoints">
-        {Array.from(endpoints.entries()).length > 0 ? (
-          <div className="space-y-2">
-            {Array.from(endpoints.entries()).map(([endpoint, count]) => (
-              <div key={endpoint} className="grid grid-cols-[1fr_auto] gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[11px] dark:border-sky-400/10 dark:bg-black/20">
-                <div className="truncate text-slate-800 dark:text-slate-100">{endpoint}</div>
-                <div className="text-slate-600 dark:text-slate-300">{formatNumber(count)}</div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState icon={WalletCards} text="No endpoint data in the current snapshot." />
-        )}
       </Panel>
     </div>
   );

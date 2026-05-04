@@ -13,7 +13,6 @@ import {
   HealthView,
   MarketDataView,
   PositionsView,
-  RpcNodesView,
   SettingsView,
 } from "./components/NavigationViews";
 import { navItems, thresholds } from "./data/mockData";
@@ -34,6 +33,39 @@ const loadStoredWatchlist = () => {
     return [];
   }
 };
+
+const liveStatusTone = {
+  connected: {
+    dot: "bg-emerald-400",
+    ring: "bg-emerald-400/30",
+    text: "text-emerald-700 dark:text-emerald-300",
+    label: "Connected",
+  },
+  reconnecting: {
+    dot: "bg-amber-400",
+    ring: "bg-amber-400/30",
+    text: "text-amber-700 dark:text-amber-300",
+    label: "Reconnecting",
+  },
+  connecting: {
+    dot: "bg-sky-400",
+    ring: "bg-sky-400/30",
+    text: "text-sky-700 dark:text-sky-300",
+    label: "Connecting",
+  },
+  mock: {
+    dot: "bg-slate-400",
+    ring: "bg-slate-400/30",
+    text: "text-slate-700 dark:text-slate-300",
+    label: "Mock mode",
+  },
+  paused: {
+    dot: "bg-amber-400",
+    ring: "bg-amber-400/30",
+    text: "text-amber-700 dark:text-amber-300",
+    label: "Paused",
+  },
+} as const;
 
 function App() {
   const [activeNav, setActiveNav] = useState(navItems[0].label);
@@ -332,8 +364,6 @@ function App() {
         return <MarketDataView {...viewProps} />;
       case "Health":
         return <HealthView {...viewProps} />;
-      case "RPC & Nodes":
-        return <RpcNodesView {...viewProps} />;
       case "Settings":
         return <SettingsView {...viewProps} />;
       default:
@@ -363,7 +393,13 @@ function App() {
           }}
         />
         <main className="flex min-w-0 flex-1 flex-col">
-          <TopBar stats={radar.topStats} theme={theme} onToggleTheme={handleThemeToggle} />
+          <TopBar
+            stats={radar.topStats}
+            theme={theme}
+            settingsActive={activeNav === "Settings"}
+            onToggleTheme={handleThemeToggle}
+            onOpenSettings={() => handleNavSelect("Settings")}
+          />
           <div className="flex-1 space-y-3 p-3">{renderContent()}</div>
         </main>
         {detailsAccount && (
@@ -386,7 +422,7 @@ function App() {
           />
         )}
         {radar.history.account && (
-          <AccountHistoryModal
+      <AccountHistoryModal
             history={radar.history}
             onClose={() => {
               radar.clearAccountHistory();
@@ -394,6 +430,23 @@ function App() {
             }}
           />
         )}
+        <div className="fixed bottom-4 left-4 z-50 sm:left-[164px]">
+          {(() => {
+            const live = paused ? liveStatusTone.paused : liveStatusTone[radar.status];
+            return (
+              <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white/95 px-3 py-2 shadow-[0_14px_36px_rgba(2,8,23,0.12)] backdrop-blur dark:border-sky-400/20 dark:bg-[#07121b]/95 dark:shadow-[0_14px_36px_rgba(0,0,0,0.38)]">
+                <div className="relative flex h-3 w-3 items-center justify-center">
+                  <span className={`absolute inline-flex h-full w-full rounded-full ${live.ring} animate-ping`} />
+                  <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${live.dot} animate-pulse`} />
+                </div>
+                <div className="leading-tight">
+                  <div className="text-[11px] font-semibold text-slate-900 dark:text-slate-100">Real-time</div>
+                  <div className={`font-mono text-[10px] ${live.text}`}>{live.label}</div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
         <div className="fixed bottom-4 right-4 z-50 min-w-[220px] rounded-md border border-slate-200 bg-white/95 px-4 py-3 text-[12px] text-slate-700 shadow-[0_18px_48px_rgba(2,8,23,0.18)] dark:border-sky-400/20 dark:bg-[#07121b]/95 dark:text-slate-200 dark:shadow-[0_18px_48px_rgba(0,0,0,0.45)]">
           <div className="mb-1 text-[10px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-500">
             Interaction
