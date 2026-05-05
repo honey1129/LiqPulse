@@ -1,4 +1,4 @@
-import { ChevronDown, Lock, Pause, Play, RefreshCcw, Search, SendHorizonal, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, Pause, Play, RefreshCcw, Search, SendHorizonal, SlidersHorizontal } from "lucide-react";
 import type { RefreshInterval, RiskFilter, SortOption } from "../types";
 
 type ControlBarProps = {
@@ -18,7 +18,6 @@ type ControlBarProps = {
   onTogglePaused: () => void;
   onManualRefresh: () => void;
   onToggleTelegram: () => void;
-  onSoon: (feature: string) => void;
 };
 
 const riskFilters: RiskFilter[] = ["All Risks", "Liquidatable", "High Risk", "Warning", "Healthy", "No Debt"];
@@ -42,10 +41,9 @@ export function ControlBar({
   onTogglePaused,
   onManualRefresh,
   onToggleTelegram,
-  onSoon,
 }: ControlBarProps) {
   return (
-    <div className="grid grid-cols-[1.1fr_150px_1fr_150px_98px_1fr] gap-3 rounded-md border border-slate-200 bg-white/80 p-3 shadow-[0_12px_28px_rgba(15,23,42,0.06)] dark:border-sky-400/[0.12] dark:bg-ink-900/[0.55] dark:shadow-none">
+    <div className="grid grid-cols-[1.1fr_1fr_150px_98px_1fr] gap-3 rounded-md border border-slate-200 bg-white/80 p-3 shadow-[0_12px_28px_rgba(15,23,42,0.06)] dark:border-sky-400/[0.12] dark:bg-ink-900/[0.55] dark:shadow-none">
       <div>
         <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 dark:text-slate-400">Protocol</div>
         <label className="relative flex h-9 w-full items-center justify-between rounded-md border border-sky-300 bg-sky-50 px-3 text-[12px] text-slate-900 dark:border-sky-400/[0.45] dark:bg-sky-500/10 dark:text-slate-100">
@@ -61,21 +59,8 @@ export function ControlBar({
             aria-label="Protocol"
           >
             <option value="marginfi v2">marginfi v2</option>
-            <option value="Solend (Soon)">Solend (Soon)</option>
-            <option value="Kamino (Soon)">Kamino (Soon)</option>
           </select>
         </label>
-      </div>
-
-      <div className="flex items-end gap-2">
-        <button
-          type="button"
-          onClick={() => onSoon("Solend adapter")}
-          className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 text-[11px] font-medium text-slate-600 hover:border-sky-300 hover:text-slate-900 dark:border-slate-700 dark:bg-black/20 dark:text-slate-500 dark:hover:border-sky-400/30 dark:hover:text-slate-300"
-        >
-          Solend (Soon)
-          <Lock className="h-3 w-3" />
-        </button>
       </div>
 
       <div>

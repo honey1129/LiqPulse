@@ -113,11 +113,6 @@ function App() {
   };
 
   const handleProtocolChange = (value: string) => {
-    if (value !== "marginfi v2") {
-      notify(`${value} adapter is reserved for future integration`);
-      setProtocol("marginfi v2");
-      return;
-    }
     setProtocol(value);
     notify("Protocol set to marginfi v2");
   };
@@ -284,7 +279,6 @@ function App() {
         notify(applied ? "Snapshot refresh requested" : "Live stream is not connected");
       }}
       onToggleTelegram={handleTelegramToggle}
-      onSoon={(feature) => notify(`${feature} is not connected yet`)}
     />
   );
 
