@@ -1,16 +1,68 @@
 import { SendHorizonal } from "lucide-react";
-import type { NavItem } from "../types";
+import type { NavItem, StreamStatus } from "../types";
 
 type SidebarProps = {
   items: NavItem[];
   activeLabel: string;
   telegramConfigured: boolean;
   telegramEnabled: boolean;
+  streamStatus: StreamStatus;
+  paused: boolean;
   onSelect: (label: string) => void;
   onConfigureAlerts: () => void;
 };
 
-export function Sidebar({ items, activeLabel, telegramConfigured, telegramEnabled, onSelect, onConfigureAlerts }: SidebarProps) {
+const liveStatusTone = {
+  connected: {
+    dot: "bg-emerald-400",
+    ring: "bg-emerald-400/30",
+    text: "text-emerald-700 dark:text-emerald-300",
+    label: "Connected",
+  },
+  reconnecting: {
+    dot: "bg-amber-400",
+    ring: "bg-amber-400/30",
+    text: "text-amber-700 dark:text-amber-300",
+    label: "Reconnecting",
+  },
+  connecting: {
+    dot: "bg-sky-400",
+    ring: "bg-sky-400/30",
+    text: "text-sky-700 dark:text-sky-300",
+    label: "Connecting",
+  },
+  mock: {
+    dot: "bg-slate-400",
+    ring: "bg-slate-400/30",
+    text: "text-slate-700 dark:text-slate-300",
+    label: "Mock mode",
+  },
+  disconnected: {
+    dot: "bg-slate-400",
+    ring: "bg-slate-400/30",
+    text: "text-slate-700 dark:text-slate-300",
+    label: "Disconnected",
+  },
+  paused: {
+    dot: "bg-amber-400",
+    ring: "bg-amber-400/30",
+    text: "text-amber-700 dark:text-amber-300",
+    label: "Paused",
+  },
+} as const;
+
+export function Sidebar({
+  items,
+  activeLabel,
+  telegramConfigured,
+  telegramEnabled,
+  streamStatus,
+  paused,
+  onSelect,
+  onConfigureAlerts,
+}: SidebarProps) {
+  const live = paused ? liveStatusTone.paused : liveStatusTone[streamStatus];
+
   return (
     <aside className="flex w-[148px] shrink-0 flex-col border-r border-slate-200 bg-white/90 px-2 py-3 dark:border-sky-400/10 dark:bg-ink-950/90">
       <div className="mb-4 flex h-9 items-center gap-2 px-2">
@@ -44,25 +96,40 @@ export function Sidebar({ items, activeLabel, telegramConfigured, telegramEnable
         })}
       </nav>
 
-      <div className="mt-auto space-y-3 rounded-md border border-slate-200 bg-slate-50 p-2 dark:border-sky-400/10 dark:bg-ink-900/[0.55]">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full border border-sky-300 bg-sky-50 text-sky-600 dark:border-sky-400/30 dark:bg-sky-400/10 dark:text-sky-300">
-            <SendHorizonal className="h-4 w-4" />
+      <div className="mt-auto space-y-2">
+        <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-2 dark:border-sky-400/10 dark:bg-ink-900/[0.55]">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-sky-300 bg-sky-50 text-sky-600 dark:border-sky-400/30 dark:bg-sky-400/10 dark:text-sky-300">
+              <SendHorizonal className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-[11px] font-semibold text-slate-800 dark:text-slate-200">Telegram Alerts</div>
+              <div className={`text-[10px] ${!telegramConfigured ? "text-slate-600 dark:text-slate-500" : telegramEnabled ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
+                {!telegramConfigured ? "Not Configured" : telegramEnabled ? "Enabled" : "Disabled"}
+              </div>
+            </div>
           </div>
-          <div>
-            <div className="text-[11px] font-semibold text-slate-800 dark:text-slate-200">Telegram Alerts</div>
-            <div className={`text-[10px] ${!telegramConfigured ? "text-slate-600 dark:text-slate-500" : telegramEnabled ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
-              {!telegramConfigured ? "Not Configured" : telegramEnabled ? "Enabled" : "Disabled"}
+          <button
+            type="button"
+            onClick={onConfigureAlerts}
+            className="h-8 w-full rounded border border-dashed border-slate-300 text-[11px] font-medium text-slate-700 hover:border-sky-400/60 hover:text-sky-600 dark:border-slate-600 dark:text-slate-400 dark:hover:border-sky-400/40 dark:hover:text-sky-300"
+          >
+            Configure
+          </button>
+        </div>
+
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 dark:border-sky-400/10 dark:bg-ink-900/[0.55]">
+          <div className="flex items-center gap-2">
+            <div className="relative flex h-3 w-3 items-center justify-center">
+              <span className={`absolute inline-flex h-full w-full rounded-full ${live.ring} animate-ping`} />
+              <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${live.dot} animate-pulse`} />
+            </div>
+            <div className="min-w-0 leading-tight">
+              <div className="text-[11px] font-semibold text-slate-800 dark:text-slate-200">Real-time</div>
+              <div className={`truncate font-mono text-[10px] ${live.text}`}>{live.label}</div>
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onConfigureAlerts}
-          className="h-8 w-full rounded border border-dashed border-slate-300 text-[11px] font-medium text-slate-700 hover:border-sky-400/60 hover:text-sky-600 dark:border-slate-600 dark:text-slate-400 dark:hover:border-sky-400/40 dark:hover:text-sky-300"
-        >
-          Configure
-        </button>
       </div>
 
       <div className="mt-7 px-2 text-[10px] text-slate-400 dark:text-slate-500">v1.3.0</div>
