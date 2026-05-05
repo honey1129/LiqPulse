@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { Clock3, Moon, Settings, SunMedium } from "lucide-react";
 import type { RadarStat, ThemeMode } from "../types";
 
@@ -16,6 +17,15 @@ const statTone = {
   red: "text-red-700 dark:text-red-300",
   neutral: "text-slate-900 dark:text-slate-200",
 };
+
+const formatBrowserTime = (date: Date) =>
+  new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZoneName: "short",
+  }).format(date);
 
 function StatStrip({ stats }: { stats: RadarStat[] }) {
   return (
@@ -37,6 +47,14 @@ function StatStrip({ stats }: { stats: RadarStat[] }) {
 }
 
 export function TopBar({ stats, theme, onToggleTheme, settingsActive, onOpenSettings }: TopBarProps) {
+  const [now, setNow] = useState(() => new Date());
+  const browserTimeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "Local", []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   return (
     <header className="flex h-12 items-center border-b border-slate-200/80 bg-white/85 px-3 backdrop-blur dark:border-sky-400/10 dark:bg-ink-950/80">
       <div className="flex min-w-0 flex-1 items-center gap-5">
@@ -47,9 +65,12 @@ export function TopBar({ stats, theme, onToggleTheme, settingsActive, onOpenSett
         </div>
 
         <div className="flex shrink-0 items-center gap-4 text-slate-500 dark:text-slate-400">
-          <div className="flex items-center gap-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-300">
+          <div
+            className="flex min-w-[118px] items-center gap-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-300"
+            title={browserTimeZone}
+          >
             <Clock3 className="h-3.5 w-3.5" />
-            12:34:56 UTC
+            {formatBrowserTime(now)}
           </div>
           <button
             type="button"
