@@ -16,6 +16,7 @@ from the latest known state before new live updates arrive.
 - WebSocket API bridge for the React/Vite frontend through `api_server.py`.
 - Database-backed warm starts and append-only account history with batched writes.
 - MySQL, SQLite, and PostgreSQL persistence backends.
+- Telegram alerts for liquidatable and high-risk accounts with cooldown-based dedupe.
 
 ## Requirements
 
@@ -88,7 +89,9 @@ npm install
 npm run dev
 ```
 
-If the API bridge is offline, the frontend falls back to mock data.
+During `npm run dev`, the frontend can fall back to mock data while the API
+bridge is offline. Production builds do not show mock account data unless
+`VITE_RADAR_ALLOW_MOCK_FALLBACK=true` is explicitly set.
 
 ## Database Persistence and Warm Starts
 
@@ -201,6 +204,12 @@ LIQUIDATION_RADAR_DB_WRITE_QUEUE_SIZE=20000
 LIQUIDATION_RADAR_DB_WRITE_BATCH_SIZE=250
 LIQUIDATION_RADAR_DB_FLUSH_INTERVAL_MS=500
 LIQUIDATION_RADAR_DB_HISTORY_ENABLED=true
+
+LIQUIDATION_RADAR_TELEGRAM_ENABLED=false
+LIQUIDATION_RADAR_TELEGRAM_BOT_TOKEN=
+LIQUIDATION_RADAR_TELEGRAM_CHAT_ID=
+LIQUIDATION_RADAR_TELEGRAM_COOLDOWN_MS=300000
+LIQUIDATION_RADAR_TELEGRAM_TIMEOUT=8
 
 LIQUIDATION_RADAR_MIN_DISPLAY_HF=0
 LIQUIDATION_RADAR_HIGH_RISK_HF=1.05

@@ -19,6 +19,7 @@ type ViewProps = {
   sourceStatus: SourceStatus[];
   topStats: RadarStat[];
   streamStatus: StreamStatus;
+  telegramConfigured: boolean;
   watchlist: Set<string>;
   telegramEnabled: boolean;
   theme: ThemeMode;
@@ -56,9 +57,10 @@ const totalCollateral = (accounts: RiskAccount[]) => accounts.reduce((sum, accou
 const watchedAccounts = (accounts: RiskAccount[], watchlist: Set<string>) =>
   accounts.filter((account) => watchlist.has(accountKey(account)));
 
-export function AlertsView({ accounts, watchlist, telegramEnabled, onToggleTelegram, onOpenDetails }: ViewProps) {
+export function AlertsView({ accounts, watchlist, telegramConfigured, telegramEnabled, onToggleTelegram, onOpenDetails }: ViewProps) {
   const risky = accounts.filter((account) => ["Liquidatable", "High Risk", "Warning"].includes(account.risk));
   const watched = watchedAccounts(accounts, watchlist);
+  const telegramLabel = !telegramConfigured ? "Not Configured" : telegramEnabled ? "Enabled" : "Disabled";
 
   return (
     <div className="grid gap-3 lg:grid-cols-[0.95fr_1.05fr]">
@@ -70,15 +72,16 @@ export function AlertsView({ accounts, watchlist, telegramEnabled, onToggleTeleg
             </div>
             <div>
               <div className="text-[13px] font-bold text-slate-900 dark:text-white">Telegram</div>
-              <StatusPill label={telegramEnabled ? "Enabled" : "Disabled"} tone={telegramEnabled ? "green" : "muted"} />
+              <StatusPill label={telegramLabel} tone={!telegramConfigured ? "muted" : telegramEnabled ? "green" : "amber"} />
             </div>
           </div>
           <button
             type="button"
             onClick={onToggleTelegram}
-            className="h-8 rounded-md border border-sky-300 bg-sky-50 px-3 text-[11px] font-semibold text-sky-700 hover:border-sky-400 dark:border-sky-400/30 dark:bg-sky-400/10 dark:text-sky-200"
+            disabled={!telegramConfigured}
+            className="h-8 rounded-md border border-sky-300 bg-sky-50 px-3 text-[11px] font-semibold text-sky-700 hover:border-sky-400 disabled:cursor-not-allowed disabled:opacity-50 dark:border-sky-400/30 dark:bg-sky-400/10 dark:text-sky-200"
           >
-            {telegramEnabled ? "Disable" : "Enable"}
+            {!telegramConfigured ? "Unavailable" : telegramEnabled ? "Disable" : "Enable"}
           </button>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
@@ -234,6 +237,8 @@ export function MarketDataView({ accounts }: ViewProps) {
 export function HealthView({ accounts, sourceStatus, topStats, streamStatus }: ViewProps) {
   const risky = accounts.filter((account) => ["Liquidatable", "High Risk", "Warning"].includes(account.risk)).length;
   const connected = streamStatus === "connected";
+  const metricTone = (tone: RadarStat["tone"] | undefined): "green" | "blue" | "amber" | "red" | "muted" =>
+    tone === "red" ? "red" : tone === "amber" ? "amber" : tone === "blue" ? "blue" : tone === "green" ? "green" : "muted";
 
   return (
     <div className="grid gap-3 lg:grid-cols-[0.85fr_1.15fr]">
@@ -247,7 +252,7 @@ export function HealthView({ accounts, sourceStatus, topStats, streamStatus }: V
       <Panel title="Telemetry">
         <div className="grid grid-cols-2 gap-2">
           {topStats.map((stat) => (
-            <Metric key={stat.label} label={stat.label} value={stat.value} tone={stat.tone === "red" ? "red" : stat.tone === "amber" ? "amber" : "green"} />
+            <Metric key={stat.label} label={stat.label} value={stat.value} tone={metricTone(stat.tone)} />
           ))}
           {sourceStatus.map((item) => (
             <Metric key={item.label} label={item.label} value={item.value} />
@@ -260,6 +265,7 @@ export function HealthView({ accounts, sourceStatus, topStats, streamStatus }: V
 
 export function SettingsView({
   telegramEnabled,
+  telegramConfigured,
   theme,
   refreshInterval,
   paused,
@@ -273,7 +279,13 @@ export function SettingsView({
       <Panel title="Runtime Settings">
         <div className="space-y-2">
           <SettingRow label="Theme" value={theme} action="Toggle" icon={Settings} onClick={onToggleTheme} />
-          <SettingRow label="Telegram Alerts" value={telegramEnabled ? "Enabled" : "Disabled"} action={telegramEnabled ? "Disable" : "Enable"} icon={Bell} onClick={onToggleTelegram} />
+          <SettingRow
+            label="Telegram Alerts"
+            value={!telegramConfigured ? "Not Configured" : telegramEnabled ? "Enabled" : "Disabled"}
+            action={!telegramConfigured ? "Unavailable" : telegramEnabled ? "Disable" : "Enable"}
+            icon={Bell}
+            onClick={telegramConfigured ? onToggleTelegram : undefined}
+          />
           <SettingRow label="Live Updates" value={paused ? "Paused" : "Running"} action="Managed in toolbar" icon={Activity} />
         </div>
       </Panel>

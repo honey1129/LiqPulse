@@ -7,7 +7,7 @@ import signal
 from backfill import InitialBackfillRunner
 from config import RadarConfig
 from models import AccountUpdate
-from pipeline import NoopNotifier, process_updates
+from pipeline import build_risk_notifier, process_updates
 from protocols import ProtocolAdapter, build_protocol_adapter
 from ranking_engine import RankingEngine
 from risk_engine import RiskEngine
@@ -90,7 +90,7 @@ async def run() -> None:
     protocol = build_protocol_adapter(config)
     risk_engine = RiskEngine(config)
     ranking_engine = RankingEngine(config)
-    notifier = NoopNotifier()
+    notifier = build_risk_notifier(config)
     ws_client = MarginfiWebSocketClient(config, protocol, updates)
     state_store = build_account_state_store(config)
     state_sink: NoopStateSink | AccountStateWriter = NoopStateSink()

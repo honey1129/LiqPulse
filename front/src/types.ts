@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 
 export type RiskLevel = "Liquidatable" | "High Risk" | "Warning" | "Healthy" | "No Debt" | "Invalid";
 export type ThemeMode = "dark" | "light";
-export type StreamStatus = "connecting" | "connected" | "reconnecting" | "mock";
+export type StreamStatus = "connecting" | "connected" | "reconnecting" | "mock" | "disconnected";
 export type RiskFilter = "All Risks" | RiskLevel;
 export type SortOption = "HF ASC, Size DESC" | "HF DESC" | "Size DESC" | "Slot DESC" | "Latency ASC";
 export type RefreshInterval = "500ms" | "1s" | "5s" | "Manual";

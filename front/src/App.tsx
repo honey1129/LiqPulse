@@ -59,6 +59,12 @@ const liveStatusTone = {
     text: "text-slate-700 dark:text-slate-300",
     label: "Mock mode",
   },
+  disconnected: {
+    dot: "bg-slate-400",
+    ring: "bg-slate-400/30",
+    text: "text-slate-700 dark:text-slate-300",
+    label: "Disconnected",
+  },
   paused: {
     dot: "bg-amber-400",
     ring: "bg-amber-400/30",
@@ -75,7 +81,6 @@ function App() {
   const [refreshInterval, setRefreshInterval] = useState<RefreshInterval>("1s");
   const [search, setSearch] = useState("");
   const [paused, setPaused] = useState(false);
-  const [telegramEnabled, setTelegramEnabled] = useState(false);
   const [selectedRank, setSelectedRank] = useState<number | null>(6);
   const [openMenuRank, setOpenMenuRank] = useState<number | null>(6);
   const [copiedProgram, setCopiedProgram] = useState(false);
@@ -84,7 +89,7 @@ function App() {
   const [detailsAccount, setDetailsAccount] = useState<RiskAccount | null>(null);
   const [positionsAccount, setPositionsAccount] = useState<RiskAccount | null>(null);
   const [watchlist, setWatchlist] = useState<string[]>(loadStoredWatchlist);
-  const radar = useRadarStream();
+  const radar = useRadarStream({ paused, refreshInterval });
   const watchlistSet = useMemo(() => new Set(watchlist), [watchlist]);
 
   const notify = (message: string) => {
@@ -165,11 +170,18 @@ function App() {
   };
 
   const handleTelegramToggle = () => {
-    setTelegramEnabled((value) => {
-      const next = !value;
-      notify(next ? "Telegram alerts enabled" : "Telegram alerts disabled");
-      return next;
-    });
+    if (!radar.telegramConfigured) {
+      notify("Telegram is not configured on the backend");
+      return;
+    }
+
+    const next = !radar.telegramEnabled;
+    if (!radar.setTelegramEnabled(next)) {
+      notify("Telegram alerts are unavailable until the stream is connected");
+      return;
+    }
+
+    notify(next ? "Telegram alerts enabled" : "Telegram alerts disabled");
   };
 
   const openDetails = (account: RiskAccount) => {
@@ -258,7 +270,8 @@ function App() {
     topStats: radar.topStats,
     streamStatus: radar.status,
     watchlist: watchlistSet,
-    telegramEnabled,
+    telegramConfigured: radar.telegramConfigured,
+    telegramEnabled: radar.telegramEnabled,
     theme,
     refreshInterval,
     paused,
@@ -279,7 +292,8 @@ function App() {
       refreshInterval={refreshInterval}
       search={search}
       paused={paused}
-      telegramEnabled={telegramEnabled}
+      telegramConfigured={radar.telegramConfigured}
+      telegramEnabled={radar.telegramEnabled}
       onProtocolChange={handleProtocolChange}
       onRiskFilterChange={(filter) => {
         setRiskFilter(filter);
@@ -304,7 +318,10 @@ function App() {
           return next;
         });
       }}
-      onManualRefresh={() => notify("Manual refresh requested")}
+      onManualRefresh={() => {
+        const applied = radar.requestSnapshot();
+        notify(applied ? "Snapshot refresh requested" : "Live stream is not connected");
+      }}
       onToggleTelegram={handleTelegramToggle}
       onSoon={(feature) => notify(`${feature} is not connected yet`)}
     />
@@ -382,14 +399,14 @@ function App() {
         <Sidebar
           items={navItems}
           activeLabel={activeNav}
-          telegramEnabled={telegramEnabled}
+          telegramConfigured={radar.telegramConfigured}
+          telegramEnabled={radar.telegramEnabled}
           onSelect={handleNavSelect}
           onConfigureAlerts={() => {
             closeAccountPanels();
             setOpenMenuRank(null);
-            setActiveNav("Alerts");
-            setTelegramEnabled(true);
-            notify("Alerts panel opened");
+            setActiveNav("Settings");
+            notify("Telegram settings opened");
           }}
         />
         <main className="flex min-w-0 flex-1 flex-col">
@@ -422,7 +439,7 @@ function App() {
           />
         )}
         {radar.history.account && (
-      <AccountHistoryModal
+          <AccountHistoryModal
             history={radar.history}
             onClose={() => {
               radar.clearAccountHistory();

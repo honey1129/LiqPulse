@@ -152,6 +152,11 @@ class RadarConfig:
     database_write_batch_size: int
     database_flush_interval_ms: int
     database_history_enabled: bool
+    telegram_enabled: bool
+    telegram_bot_token: str
+    telegram_chat_id: str
+    telegram_cooldown_ms: int
+    telegram_timeout_s: float
     backfill_enabled: bool
     backfill_required: bool
     backfill_retry_count: int
@@ -214,6 +219,11 @@ class RadarConfig:
             database_write_batch_size=_get_int("LIQUIDATION_RADAR_DB_WRITE_BATCH_SIZE", 250),
             database_flush_interval_ms=_get_int("LIQUIDATION_RADAR_DB_FLUSH_INTERVAL_MS", 500),
             database_history_enabled=_get_bool("LIQUIDATION_RADAR_DB_HISTORY_ENABLED", True),
+            telegram_enabled=_get_bool("LIQUIDATION_RADAR_TELEGRAM_ENABLED", False),
+            telegram_bot_token=os.getenv("LIQUIDATION_RADAR_TELEGRAM_BOT_TOKEN", ""),
+            telegram_chat_id=os.getenv("LIQUIDATION_RADAR_TELEGRAM_CHAT_ID", ""),
+            telegram_cooldown_ms=_get_int("LIQUIDATION_RADAR_TELEGRAM_COOLDOWN_MS", 300000),
+            telegram_timeout_s=_get_float("LIQUIDATION_RADAR_TELEGRAM_TIMEOUT", 8.0),
             backfill_enabled=_get_bool("LIQUIDATION_RADAR_BACKFILL_ENABLED", True),
             backfill_required=_get_bool("LIQUIDATION_RADAR_BACKFILL_REQUIRED", False),
             backfill_retry_count=_get_int("LIQUIDATION_RADAR_BACKFILL_RETRY_COUNT", 3),

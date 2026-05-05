@@ -4,12 +4,13 @@ import type { NavItem } from "../types";
 type SidebarProps = {
   items: NavItem[];
   activeLabel: string;
+  telegramConfigured: boolean;
   telegramEnabled: boolean;
   onSelect: (label: string) => void;
   onConfigureAlerts: () => void;
 };
 
-export function Sidebar({ items, activeLabel, telegramEnabled, onSelect, onConfigureAlerts }: SidebarProps) {
+export function Sidebar({ items, activeLabel, telegramConfigured, telegramEnabled, onSelect, onConfigureAlerts }: SidebarProps) {
   return (
     <aside className="flex w-[148px] shrink-0 flex-col border-r border-slate-200 bg-white/90 px-2 py-3 dark:border-sky-400/10 dark:bg-ink-950/90">
       <div className="mb-4 flex h-9 items-center gap-2 px-2">
@@ -50,8 +51,8 @@ export function Sidebar({ items, activeLabel, telegramEnabled, onSelect, onConfi
           </div>
           <div>
             <div className="text-[11px] font-semibold text-slate-800 dark:text-slate-200">Telegram Alerts</div>
-            <div className={`text-[10px] ${telegramEnabled ? "text-emerald-700 dark:text-emerald-300" : "text-slate-600 dark:text-slate-500"}`}>
-              {telegramEnabled ? "Enabled" : "Not Configured"}
+            <div className={`text-[10px] ${!telegramConfigured ? "text-slate-600 dark:text-slate-500" : telegramEnabled ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
+              {!telegramConfigured ? "Not Configured" : telegramEnabled ? "Enabled" : "Disabled"}
             </div>
           </div>
         </div>

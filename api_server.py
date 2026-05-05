@@ -14,7 +14,7 @@ import websockets
 from backfill import InitialBackfillRunner
 from config import RadarConfig
 from models import AccountStateHistoryRecord, AccountUpdate, MarginfiAccountState, RadarStats, RiskLevel
-from pipeline import NoopNotifier, process_updates
+from pipeline import RiskNotifier, build_risk_notifier, process_updates
 from protocols import ProtocolAdapter, build_protocol_adapter
 from ranking_engine import RankingEngine
 from risk_engine import RiskEngine
@@ -130,41 +130,13 @@ def _history_response_payload(
     }
 
 
-def _history_point_payload(record: AccountStateHistoryRecord) -> dict[str, Any]:
-    state = record.state
-    return {
-        "slot": state.slot,
-        "recordedAtMs": record.recorded_at_ms,
-        "collateralUsd": _decimal_float(state.collateral_value) or 0.0,
-        "debtUsd": _decimal_float(state.debt_value) or 0.0,
-        "exposureUsd": _decimal_float(state.exposure_usd) or 0.0,
-        "hf": _decimal_float(state.health_factor),
-        "risk": _risk_label(state.risk_level),
-        "rpcEndpoint": state.rpc_endpoint,
-    }
-
-
-def _history_response_payload(
-    request_id: str,
-    pubkey: str,
-    records: list[AccountStateHistoryRecord],
-) -> dict[str, Any]:
-    return {
-        "type": "account_history",
-        "requestId": request_id,
-        "account": short_pubkey(pubkey),
-        "accountFull": pubkey,
-        "count": len(records),
-        "points": [_history_point_payload(record) for record in records],
-    }
-
-
 def _snapshot_payload(
     ranking_engine: RankingEngine,
     config: RadarConfig,
     protocol: ProtocolAdapter,
     updates: asyncio.Queue[AccountUpdate],
     trends: dict[str, RiskTrend],
+    notifier: RiskNotifier,
 ) -> dict[str, Any]:
     stats = ranking_engine.stats()
     top_accounts = ranking_engine.top(config.top_n)
@@ -178,6 +150,10 @@ def _snapshot_payload(
         "generatedAtMs": monotonic_ms(),
         "rpcEndpoint": stats.last_rpc_endpoint or config.ws_endpoints[0],
         "queueDepth": updates.qsize(),
+        "alerts": {
+            "telegramConfigured": notifier.configured,
+            "telegramEnabled": notifier.enabled,
+        },
         "stats": _stats_payload(stats),
         "accounts": [
             _account_payload(index, account, _expanded_trend(trends[account.pubkey]))
@@ -213,12 +189,14 @@ class RadarApiServer:
         ranking_engine: RankingEngine,
         updates: asyncio.Queue[AccountUpdate],
         state_store: AccountStateStore,
+        notifier: RiskNotifier,
     ) -> None:
         self._config = config
         self._protocol = protocol
         self._ranking_engine = ranking_engine
         self._updates = updates
         self._state_store = state_store
+        self._notifier = notifier
         self._clients: set[Any] = set()
         self._trends: dict[str, RiskTrend] = defaultdict(lambda: deque(maxlen=14))
 
@@ -240,7 +218,32 @@ class RadarApiServer:
         except (TypeError, json.JSONDecodeError):
             return
 
-        if not isinstance(payload, dict) or payload.get("type") != "account_history":
+        if not isinstance(payload, dict):
+            return
+
+        message_type = payload.get("type")
+        if message_type == "snapshot_request":
+            await websocket.send(self.snapshot_json())
+            return
+
+        if message_type == "alert_settings":
+            enabled = bool(payload.get("telegramEnabled"))
+            changed = self._notifier.set_enabled(enabled)
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "alert_settings",
+                        "telegramConfigured": self._notifier.configured,
+                        "telegramEnabled": self._notifier.enabled,
+                        "changed": changed,
+                    },
+                    separators=(",", ":"),
+                )
+            )
+            await websocket.send(self.snapshot_json())
+            return
+
+        if message_type != "account_history":
             return
 
         request_id = str(payload.get("requestId", ""))
@@ -290,6 +293,7 @@ class RadarApiServer:
             self._protocol,
             self._updates,
             self._trends,
+            self._notifier,
         )
         return json.dumps(payload, separators=(",", ":"))
 
@@ -329,6 +333,7 @@ async def run() -> None:
     protocol = build_protocol_adapter(config)
     risk_engine = RiskEngine(config)
     ranking_engine = RankingEngine(config)
+    notifier = build_risk_notifier(config)
     ws_client = MarginfiWebSocketClient(config, protocol, updates)
     state_store = build_account_state_store(config)
     state_sink: NoopStateSink | AccountStateWriter = NoopStateSink()
@@ -357,7 +362,7 @@ async def run() -> None:
                 raise
             LOGGER.exception("database persistence disabled: %s", exc)
 
-    api = RadarApiServer(config, protocol, ranking_engine, updates, state_store)
+    api = RadarApiServer(config, protocol, ranking_engine, updates, state_store, notifier)
     backfill = InitialBackfillRunner(config, protocol, risk_engine, ranking_engine, state_sink)
 
     ws_task = asyncio.create_task(ws_client.run(stop_event), name="solana-websocket")
@@ -382,7 +387,7 @@ async def run() -> None:
             *([writer_task] if writer_task is not None else []),
             *[
                 asyncio.create_task(
-                    process_updates(updates, protocol, risk_engine, ranking_engine, NoopNotifier(), stop_event, state_sink),
+                    process_updates(updates, protocol, risk_engine, ranking_engine, notifier, stop_event, state_sink),
                     name=f"risk-worker-{idx}",
                 )
                 for idx in range(max(1, config.risk_worker_count))

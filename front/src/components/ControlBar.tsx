@@ -8,6 +8,7 @@ type ControlBarProps = {
   refreshInterval: RefreshInterval;
   search: string;
   paused: boolean;
+  telegramConfigured: boolean;
   telegramEnabled: boolean;
   onProtocolChange: (protocol: string) => void;
   onRiskFilterChange: (filter: RiskFilter) => void;
@@ -31,6 +32,7 @@ export function ControlBar({
   refreshInterval,
   search,
   paused,
+  telegramConfigured,
   telegramEnabled,
   onProtocolChange,
   onRiskFilterChange,
@@ -177,16 +179,20 @@ export function ControlBar({
         <button
           type="button"
           onClick={onToggleTelegram}
+          disabled={!telegramConfigured}
+          title={!telegramConfigured ? "Telegram is not configured on the backend" : telegramEnabled ? "Disable Telegram alerts" : "Enable Telegram alerts"}
           className={`flex h-8 items-center gap-2 rounded-md border px-3 text-[11px] ${
-            telegramEnabled
-              ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-200"
-              : "border-sky-300 bg-sky-50 text-slate-800 dark:border-sky-400/20 dark:bg-sky-400/10 dark:text-slate-200"
+            !telegramConfigured
+              ? "cursor-not-allowed border-slate-300 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-black/20 dark:text-slate-500"
+              : telegramEnabled
+                ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-200"
+                : "border-sky-300 bg-sky-50 text-slate-800 dark:border-sky-400/20 dark:bg-sky-400/10 dark:text-slate-200"
           }`}
         >
           <SendHorizonal className="h-3.5 w-3.5 text-sky-700 dark:text-sky-300" />
-          Telegram Alerts
+          {!telegramConfigured ? "Telegram Unavailable" : "Telegram Alerts"}
           <span className={`rounded border px-1.5 py-0.5 text-[10px] ${telegramEnabled ? "border-emerald-300 text-emerald-700 dark:border-emerald-400/30 dark:text-emerald-300" : "border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-500"}`}>
-            {telegramEnabled ? "On" : "Off"}
+            {!telegramConfigured ? "N/A" : telegramEnabled ? "On" : "Off"}
           </span>
         </button>
       </div>
