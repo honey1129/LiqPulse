@@ -178,8 +178,9 @@ class RadarWebSocketClient:
         while not stop_event.is_set():
             try:
                 raw_message = await asyncio.wait_for(ws.recv(), timeout=self._config.ws_receive_timeout_s)
-            except TimeoutError as exc:
-                raise RpcTimeoutError(f"websocket receive timeout endpoint={endpoint}") from exc
+            except TimeoutError:
+                LOGGER.debug("websocket receive idle endpoint=%s", endpoint)
+                continue
             await self._handle_message(raw_message, endpoint, subscription_id)
 
     async def _heartbeat_loop(self, ws: Any, endpoint: str, stop_event: asyncio.Event) -> None:

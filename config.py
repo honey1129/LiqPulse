@@ -158,6 +158,8 @@ class RadarConfig:
     telegram_cooldown_ms: int
     telegram_timeout_s: float
     backfill_enabled: bool
+    backfill_skip_on_warm_start: bool
+    backfill_min_warm_start_records: int
     backfill_required: bool
     backfill_retry_count: int
     backfill_request_timeout_s: float
@@ -225,6 +227,8 @@ class RadarConfig:
             telegram_cooldown_ms=_get_int("LIQUIDATION_RADAR_TELEGRAM_COOLDOWN_MS", 300000),
             telegram_timeout_s=_get_float("LIQUIDATION_RADAR_TELEGRAM_TIMEOUT", 8.0),
             backfill_enabled=_get_bool("LIQUIDATION_RADAR_BACKFILL_ENABLED", True),
+            backfill_skip_on_warm_start=_get_bool("LIQUIDATION_RADAR_BACKFILL_SKIP_ON_WARM_START", True),
+            backfill_min_warm_start_records=_get_int("LIQUIDATION_RADAR_BACKFILL_MIN_WARM_START_RECORDS", 1),
             backfill_required=_get_bool("LIQUIDATION_RADAR_BACKFILL_REQUIRED", False),
             backfill_retry_count=_get_int("LIQUIDATION_RADAR_BACKFILL_RETRY_COUNT", 3),
             backfill_request_timeout_s=_get_float("LIQUIDATION_RADAR_BACKFILL_TIMEOUT", 30.0),

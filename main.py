@@ -18,6 +18,22 @@ from websocket_client import MarginfiWebSocketClient
 LOGGER = logging.getLogger(__name__)
 
 
+def _should_run_initial_backfill(config: RadarConfig, warm_start_loaded: int) -> bool:
+    if not config.backfill_enabled:
+        return False
+    if (
+        config.backfill_skip_on_warm_start
+        and warm_start_loaded >= max(1, config.backfill_min_warm_start_records)
+    ):
+        LOGGER.info(
+            "initial backfill skipped: database warm start loaded=%s min_records=%s",
+            warm_start_loaded,
+            config.backfill_min_warm_start_records,
+        )
+        return False
+    return True
+
+
 async def render_cli(
     ranking_engine: RankingEngine,
     config: RadarConfig,
@@ -94,16 +110,17 @@ async def run() -> None:
     ws_client = MarginfiWebSocketClient(config, protocol, updates)
     state_store = build_account_state_store(config)
     state_sink: NoopStateSink | AccountStateWriter = NoopStateSink()
+    warm_start_loaded = 0
 
     if config.database_enabled:
         try:
             await state_store.initialize()
             cached_states = await state_store.load_latest(protocol.protocol_name, config.database_warm_start_limit)
-            loaded = ranking_engine.seed(cached_states)
+            warm_start_loaded = ranking_engine.seed(cached_states)
             LOGGER.info(
                 "database warm start protocol=%s loaded=%s limit=%s source=%s",
                 protocol.protocol_name,
-                loaded,
+                warm_start_loaded,
                 config.database_warm_start_limit,
                 config.database_url,
             )
@@ -138,7 +155,8 @@ async def run() -> None:
     if isinstance(state_sink, AccountStateWriter):
         tasks.append(asyncio.create_task(state_sink.run(stop_event), name="state-writer"))
 
-    await backfill.run(stop_event)
+    if _should_run_initial_backfill(config, warm_start_loaded):
+        await backfill.run(stop_event)
     if isinstance(state_sink, AccountStateWriter):
         LOGGER.info("waiting for initial database snapshot persistence pending=%s", state_sink.pending)
         await state_sink.flush()
